@@ -11,7 +11,7 @@ Get real-time alerts for your smart contracts via Email, Discord, Slack, Telegra
 # Install dependencies
 pip install -r requirements.txt
 
-# Initialize config
+# Initialize config (or copy config.example.json to config.json)
 python main.py init
 
 # Add a contract
@@ -92,7 +92,7 @@ Ethereum, Polygon, BSC, Arbitrum, Base (add custom RPCs in config.json)
 
 ## Config
 
-All settings stored in `config.json`. Edit directly or use CLI commands.
+All runtime settings are stored in `config.json`. To get started, copy `config.example.json` to `config.json` and edit the values, or use `python main.py init` to generate one automatically.
 
 ## Requirements
 
