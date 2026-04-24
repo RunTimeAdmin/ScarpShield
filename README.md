@@ -98,3 +98,18 @@ All runtime settings are stored in `config.json`. To get started, copy `config.e
 
 - Python 3.11+
 - `web3`, `typer`
+
+## Roadmap
+
+ScarpShield is under active development. Planned features:
+
+- [ ] **Solana Monitoring** — SPL token transfers, program log subscriptions, and account change detection via Solana RPC
+- [ ] **Multi-chain Dashboard** — Unified view across all monitored chains with chain-specific filtering
+- [ ] **Persistent Event Storage** — SQLite/PostgreSQL backend for event history beyond in-memory buffer
+- [ ] **Custom Event Signatures** — User-defined event ABIs for monitoring non-standard contracts
+- [ ] **Webhook Alert Channel** — Generic outbound webhook for custom integrations
+- [ ] **Rate Limit Management** — Per-provider RPC quota tracking and automatic failover
+- [ ] **Docker Container** — Official Docker image for one-command deployment
+- [ ] **CounterScarp.io Integration** — Direct integration with CounterScarp scanning results for pre+post deployment coverage
+
+Have a feature request? [Open an issue](https://github.com/RunTimeAdmin/ScarpShield/issues).
