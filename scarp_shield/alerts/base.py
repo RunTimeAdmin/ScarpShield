@@ -5,6 +5,20 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 
 
+def format_alert(event_type, contract, details, chain="ethereum"):
+    """Format a standard alert message."""
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return (
+        f"--- ScarpShield Alert ---\n"
+        f"Time:     {ts}\n"
+        f"Chain:    {chain}\n"
+        f"Contract: {contract}\n"
+        f"Event:    {event_type}\n"
+        f"Details:  {details}\n"
+        f"-------------------------"
+    )
+
+
 class AlertBackend(ABC):
     """Base class for all alert backends."""
 
@@ -21,15 +35,4 @@ class AlertBackend(ABC):
         details: str, chain: str = "ethereum"
     ) -> str:
         """Format a standard alert message."""
-        ts = datetime.now(timezone.utc).strftime(
-            "%Y-%m-%d %H:%M:%S UTC"
-        )
-        return (
-            f"--- ScarpShield Alert ---\n"
-            f"Time:     {ts}\n"
-            f"Chain:    {chain}\n"
-            f"Contract: {contract}\n"
-            f"Event:    {event_type}\n"
-            f"Details:  {details}\n"
-            f"-------------------------"
-        )
+        return format_alert(event_type, contract, details, chain)

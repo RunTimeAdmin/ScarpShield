@@ -44,7 +44,11 @@ def add(
 ):
     """Add a contract to the watchlist."""
     config = load_config()
-    config = add_contract(config, address, label, chain)
+    try:
+        config = add_contract(config, address, label, chain)
+    except ValueError as e:
+        typer.echo(f"[!] {e}")
+        raise typer.Exit(1)
     save_config(config)
     name = label or address[:10]
     typer.echo(f"[+] Added {name} on {chain}")
@@ -251,11 +255,12 @@ def status():
 def test_alerts():
     """Send a test alert to all enabled channels."""
     import asyncio
+    from .alerts.base import format_alert
     from .alerts.dispatcher import AlertDispatcher
 
     config = load_config()
     dispatcher = AlertDispatcher(config)
-    msg = dispatcher.backends[0][1].format_alert(
+    msg = format_alert(
         event_type="TEST",
         contract="0x000...TEST",
         details="This is a test alert from ScarpShield.",

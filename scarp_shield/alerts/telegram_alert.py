@@ -1,7 +1,9 @@
 # ScarpShield - Official monitoring tool for CounterScarp.io
 # https://counterscarp.io
 
+import asyncio
 import json
+import os
 import urllib.request
 import urllib.error
 
@@ -12,8 +14,14 @@ class TelegramAlert(AlertBackend):
     """Send alerts via Telegram bot (optional)."""
 
     async def send(self, message: str, metadata: dict = None):
-        token = self.settings.get("bot_token", "")
-        chat_id = self.settings.get("chat_id", "")
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._send_sync, message, metadata)
+
+    def _send_sync(self, message: str, metadata: dict = None):
+        token = os.environ.get("SCARPSHIELD_TELEGRAM_BOT_TOKEN") or \
+            self.settings.get("bot_token", "")
+        chat_id = os.environ.get("SCARPSHIELD_TELEGRAM_CHAT_ID") or \
+            self.settings.get("chat_id", "")
         if not all([token, chat_id]):
             print("[!] Telegram not configured. Skipping.")
             return

@@ -5,6 +5,7 @@ import asyncio
 import json
 import queue
 import threading
+import time
 from collections import deque
 from datetime import datetime, timezone
 
@@ -77,7 +78,13 @@ def run_monitor_background(stop_evt: threading.Event):
 
     from web3 import Web3
 
-    from ..monitor import _check_admin_calls, _check_events
+    from ..monitor import (
+        _check_admin_calls,
+        _check_events,
+        MAX_BLOCK_RANGE,
+        load_state,
+        save_state,
+    )
 
     dispatcher = GUIAlertDispatcher(config)
     interval = config.get("poll_interval_seconds", 15)
@@ -101,7 +108,18 @@ def run_monitor_background(stop_evt: threading.Event):
     for c in contracts:
         _ensure_chain(c.get("chain", "ethereum"))
 
+    # Load persisted state
+    state = load_state()
+    persisted = state.get("last_block", {})
+    for chain, block in persisted.items():
+        if chain in chains:
+            last_block[chain] = block
+
+    failures = {}
+    last_failure_time = {}
+
     loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     try:
         while not stop_evt.is_set():
             # Reload config each iteration so new contracts /
@@ -124,12 +142,28 @@ def run_monitor_background(stop_evt: threading.Event):
                 if not w3:
                     continue
 
+                # Check backoff for this chain
+                if failures.get(chain, 0) > 0:
+                    backoff = min(interval * (2 ** failures[chain]), 300)
+                    if time.time() - last_failure_time.get(chain, 0) < backoff:
+                        continue
+
                 try:
                     current = w3.eth.block_number
                     prev = last_block.get(chain, current)
 
                     if current <= prev:
                         continue
+
+                    # Backfill cap
+                    if current - prev > MAX_BLOCK_RANGE:
+                        skipped = current - prev - MAX_BLOCK_RANGE
+                        print(
+                            f"[!] {chain}: Skipping {skipped} "
+                            f"blocks (backfill cap)"
+                        )
+                        prev = current - MAX_BLOCK_RANGE
+                        last_block[chain] = prev
 
                     _check_events(
                         w3, addr, label, chain,
@@ -148,9 +182,15 @@ def run_monitor_background(stop_evt: threading.Event):
                         )
 
                     last_block[chain] = current
+                    failures[chain] = 0
                 except Exception as e:
                     print(f"[!] Error checking {label} on {chain}: {e}")
+                    failures[chain] = min(
+                        failures.get(chain, 0) + 1, 5
+                    )
+                    last_failure_time[chain] = time.time()
 
+            save_state({"last_block": last_block})
             stop_evt.wait(interval)
     except Exception as e:
         print(f"[!] Monitor loop crashed: {e}")
@@ -204,7 +244,10 @@ def register_routes(app: Flask):
         events = data.get("events", default_events)
 
         config = load_config()
-        config = add_contract(config, address, label, chain)
+        try:
+            config = add_contract(config, address, label, chain)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
 
         # Override default events if provided
         for c in config.get("contracts", []):
@@ -303,7 +346,8 @@ def register_routes(app: Flask):
         if not dispatcher.backends:
             return jsonify({"error": "No alert backends are enabled"}), 400
 
-        msg = dispatcher.backends[0][1].format_alert(
+        from ..alerts.base import format_alert
+        msg = format_alert(
             event_type="TEST",
             contract="0x000...TEST",
             details="This is a test alert from ScarpShield GUI.",

@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from dataclasses import dataclass, field
 
+from web3 import Web3
+
 # Resolve config relative to project root (where main.py lives)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_FILE = PROJECT_ROOT / "config.json"
@@ -77,7 +79,7 @@ DEFAULT_CONFIG = {
         }
     },
     "filters": {
-        "min_transfer_value_eth": 0.0,
+        "min_transfer_value": 0.0,
         "watch_admin_events": True,
         "watch_large_transfers": True,
         "watch_approvals": True
@@ -115,6 +117,12 @@ def get_rpc_url(config: dict, chain: str) -> str:
 
 def add_contract(config: dict, address: str, label: str = "", chain: str = "ethereum") -> dict:
     """Add a contract to the watchlist."""
+    # Validate and checksum the address
+    try:
+        address = Web3.to_checksum_address(address)
+    except (ValueError, Exception):
+        raise ValueError(f"Invalid Ethereum address: {address}")
+
     entry = {
         "address": address,
         "label": label or address[:10],

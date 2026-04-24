@@ -2,10 +2,13 @@
 # https://counterscarp.io
 
 import asyncio
+import json
 import time
+from pathlib import Path
 from web3 import Web3
 
 from .config import load_config, get_rpc_url
+from .alerts.base import format_alert
 from .alerts.dispatcher import AlertDispatcher
 
 # Standard ERC-20 event signatures
@@ -31,6 +34,24 @@ ADMIN_SIGS = {
     "upgradeTo": "0x3659cfe6",
     "upgradeToAndCall": "0x4f1ef286",
 }
+
+MAX_BLOCK_RANGE = 100
+
+ERC20_DECIMALS_ABI = [
+    {
+        "inputs": [],
+        "name": "decimals",
+        "outputs": [
+            {"internalType": "uint8", "name": "", "type": "uint8"}
+        ],
+        "stateMutability": "view",
+        "type": "function",
+    }
+]
+
+STATE_FILE = Path(".scarpshield_state.json")
+
+_token_decimals = {}
 
 
 def run_monitor():
@@ -69,16 +90,22 @@ def run_monitor():
                 print(f"  [!] {chain}: Cannot connect")
 
     # Track last-seen block per chain
-    last_block = {}
+    state = load_state()
+    last_block = state.get("last_block", {})
     for chain, w3 in chains.items():
         try:
-            last_block[chain] = w3.eth.block_number
+            if chain not in last_block:
+                last_block[chain] = w3.eth.block_number
         except Exception:
             last_block[chain] = 0
+
+    failures = {}
+    last_failure_time = {}
 
     print("\nMonitoring started. Press Ctrl+C to stop.\n")
 
     loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
     try:
         while True:
@@ -92,12 +119,28 @@ def run_monitor():
                 if not w3:
                     continue
 
+                # Check backoff for this chain
+                if failures.get(chain, 0) > 0:
+                    backoff = min(interval * (2 ** failures[chain]), 300)
+                    if time.time() - last_failure_time.get(chain, 0) < backoff:
+                        continue
+
                 try:
                     current = w3.eth.block_number
                     prev = last_block.get(chain, current)
 
                     if current <= prev:
                         continue
+
+                    # Backfill cap
+                    if current - prev > MAX_BLOCK_RANGE:
+                        skipped = current - prev - MAX_BLOCK_RANGE
+                        print(
+                            f"[!] {chain}: Skipping {skipped} "
+                            f"blocks (backfill cap)"
+                        )
+                        prev = current - MAX_BLOCK_RANGE
+                        last_block[chain] = prev
 
                     # Check event logs
                     _check_events(
@@ -117,13 +160,17 @@ def run_monitor():
                         )
 
                     last_block[chain] = current
+                    failures[chain] = 0
 
                 except Exception as e:
                     print(
                         f"[!] Error checking {label} "
                         f"on {chain}: {e}"
                     )
+                    failures[chain] = min(failures.get(chain, 0) + 1, 5)
+                    last_failure_time[chain] = time.time()
 
+            save_state({"last_block": last_block})
             time.sleep(interval)
 
     except KeyboardInterrupt:
@@ -139,12 +186,17 @@ def _check_events(
 ):
     """Check for watched events on a contract."""
     filters_cfg = config.get("filters", {})
-    min_val = filters_cfg.get("min_transfer_value_eth", 0.0)
+    min_val = filters_cfg.get(
+        "min_transfer_value",
+        filters_cfg.get("min_transfer_value_eth", 0.0)
+    )
 
     for event_name in watch_events:
         sig = EVENT_SIGS.get(event_name)
         if not sig:
             continue
+
+        decimals = get_token_decimals(w3, address)
 
         try:
             logs = w3.eth.get_logs({
@@ -158,12 +210,12 @@ def _check_events(
 
         for log in logs:
             details = _parse_log(
-                w3, event_name, log, min_val
+                w3, event_name, log, min_val, decimals
             )
             if details is None:
                 continue
 
-            alert_msg = dispatcher.backends[0][1].format_alert(
+            alert_msg = format_alert(
                 event_type=event_name,
                 contract=f"{label} ({address})",
                 details=details,
@@ -174,7 +226,7 @@ def _check_events(
             )
 
 
-def _parse_log(w3, event_name, log, min_val):
+def _parse_log(w3, event_name, log, min_val, decimals=18):
     """Parse a log entry and return details string."""
     tx_hash = log.get("transactionHash", b"").hex()
 
@@ -182,7 +234,7 @@ def _parse_log(w3, event_name, log, min_val):
         frm = _topic_to_addr(log["topics"][1])
         to = _topic_to_addr(log["topics"][2])
         raw = int(log["data"].hex(), 16) if log["data"] else 0
-        value = raw / 1e18
+        value = raw / (10 ** decimals)
 
         if min_val > 0 and value < min_val:
             return None
@@ -198,7 +250,7 @@ def _parse_log(w3, event_name, log, min_val):
         owner = _topic_to_addr(log["topics"][1])
         spender = _topic_to_addr(log["topics"][2])
         raw = int(log["data"].hex(), 16) if log["data"] else 0
-        value = raw / 1e18
+        value = raw / (10 ** decimals)
         return (
             f"Owner:   {owner}\n"
             f"          Spender: {spender}\n"
@@ -240,24 +292,59 @@ def _check_admin_calls(
                 sel = inp[:10] if len(inp) >= 10 else ""
                 for fname, fsig in ADMIN_SIGS.items():
                     if sel == fsig:
-                        msg = (
-                            dispatcher.backends[0][1]
-                            .format_alert(
-                                event_type=f"ADMIN: {fname}()",
-                                contract=f"{label} ({address})",
-                                details=(
-                                    f"Caller: {tx.get('from')}\n"
-                                    f"          Tx: "
-                                    f"{tx['hash'].hex()}"
-                                ),
-                                chain=chain
-                            )
+                        msg = format_alert(
+                            event_type=f"ADMIN: {fname}()",
+                            contract=f"{label} ({address})",
+                            details=(
+                                f"Caller: {tx.get('from')}\n"
+                                f"          Tx: "
+                                f"{tx['hash'].hex()}"
+                            ),
+                            chain=chain
                         )
                         loop.run_until_complete(
                             dispatcher.dispatch(msg)
                         )
     except Exception as e:
         print(f"[!] Admin check error on {label}: {e}")
+
+
+def get_token_decimals(w3, address):
+    """Fetch ERC20 decimals with caching."""
+    addr = Web3.to_checksum_address(address)
+    if addr in _token_decimals:
+        return _token_decimals[addr]
+    try:
+        contract = w3.eth.contract(
+            address=addr, abi=ERC20_DECIMALS_ABI
+        )
+        decimals = contract.functions.decimals().call()
+    except Exception:
+        decimals = 18
+    _token_decimals[addr] = decimals
+    return decimals
+
+
+def load_state():
+    """Load last_block state from disk."""
+    if STATE_FILE.exists():
+        try:
+            return json.loads(
+                STATE_FILE.read_text(encoding="utf-8")
+            )
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def save_state(state):
+    """Save last_block state to disk."""
+    try:
+        STATE_FILE.write_text(
+            json.dumps(state, indent=2), encoding="utf-8"
+        )
+    except OSError:
+        pass
 
 
 def _topic_to_addr(topic) -> str:
