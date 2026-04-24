@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0F141A">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="ScarpShield — Smart contract monitoring by CounterScarp.io">
+
+  <title>{% block title %}ScarpShield{% endblock %} — CounterScarp.io</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header class="top-header">
+    <div class="brand">
+      <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="ScarpShield" class="brand-logo">
+      <div class="brand-text">
+        <span class="brand-name">ScarpShield</span>
+        <span class="brand-tagline">The Outer Wall of Defense</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div class="connection-status" id="connection-status">
+        <span class="status-dot status-dot-active status-dot-pulse" id="conn-dot"></span>
+        <span id="conn-text">Connected</span>
+      </div>
+      <a href="https://counterscarp.io" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">
+        counterscarp.io &#8599;
+      </a>
+    </div>
+  </header>
+
+  <!-- Sidebar Navigation -->
+  <nav class="sidebar" id="sidebar" aria-label="Main navigation">
+    <ul class="sidebar-nav">
+      <li>
+        <a href="/" class="{% if request.path == '/' %}active{% endif %}">
+          <span class="nav-icon">&#9673;</span>
+          <span class="nav-text">Dashboard</span>
+        </a>
+      </li>
+      <li>
+        <a href="/contracts" class="{% if request.path.startswith('/contracts') %}active{% endif %}">
+          <span class="nav-icon">&#11041;</span>
+          <span class="nav-text">Contracts</span>
+        </a>
+      </li>
+      <li>
+        <a href="/alerts" class="{% if request.path.startswith('/alerts') %}active{% endif %}">
+          <span class="nav-icon">&#9889;</span>
+          <span class="nav-text">Alerts</span>
+        </a>
+      </li>
+      <li>
+        <a href="/settings" class="{% if request.path.startswith('/settings') %}active{% endif %}">
+          <span class="nav-icon">&#9881;</span>
+          <span class="nav-text">Settings</span>
+        </a>
+      </li>
+      <li>
+        <a href="/logs" class="{% if request.path.startswith('/logs') %}active{% endif %}">
+          <span class="nav-icon">&#9776;</span>
+          <span class="nav-text">Logs</span>
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="main-wrapper">
+    <main class="main-content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <!-- Status Bar -->
+  <footer class="status-bar" id="status-bar">
+    <div class="status-bar-left">
+      <div class="status-bar-item">
+        <span class="status-dot status-dot-active" id="status-dot"></span>
+        <span id="monitor-status">Monitoring active</span>
+      </div>
+      <div class="status-bar-item">
+        <span class="font-mono" id="contracts-count">0</span>
+        <span>contracts</span>
+      </div>
+      <div class="status-bar-item">
+        <span class="font-mono" id="alerts-count">0</span>
+        <span>alerts enabled</span>
+      </div>
+    </div>
+    <div class="status-bar-right">
+      <div class="status-bar-item">
+        <span>ScarpShield v0.1.0</span>
+      </div>
+      <div class="status-bar-item">
+        <span id="last-updated">--:--:--</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Toast Container -->
+  <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Modal Overlay -->
+  <div class="modal-overlay" id="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-content" id="modal-content" role="document">
+      <div class="modal-header">
+        <h3 id="modal-title">Confirm</h3>
+        <button type="button" class="modal-close" id="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer" id="modal-footer">
+        <button type="button" class="btn btn-ghost" id="modal-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="modal-confirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

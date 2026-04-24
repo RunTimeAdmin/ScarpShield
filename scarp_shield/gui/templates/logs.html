@@ -1,0 +1,444 @@
+{% extends "base.html" %}
+
+{% block title %}Logs{% endblock %}
+
+{% block content %}
+<div class="page-header animate-fade-in">
+  <h1>Event Logs</h1>
+  <p>Review historical events detected across all monitored contracts and chains.</p>
+</div>
+
+<!-- Filter Bar -->
+<div class="filter-bar animate-fade-in">
+  <select id="filter-event-type" class="form-select">
+    <option value="">All Event Types</option>
+    <option value="Transfer">Transfer</option>
+    <option value="Approval">Approval</option>
+    <option value="OwnershipTransferred">OwnershipTransferred</option>
+    <option value="AdminCall">AdminCall</option>
+  </select>
+
+  <select id="filter-chain" class="form-select">
+    <option value="">All Chains</option>
+    <option value="ethereum">Ethereum</option>
+    <option value="polygon">Polygon</option>
+    <option value="bsc">BSC</option>
+    <option value="arbitrum">Arbitrum</option>
+    <option value="base">Base</option>
+  </select>
+
+  <input type="text" id="filter-search" class="form-input" placeholder="Search address or details...">
+
+  <input type="datetime-local" id="filter-from" class="form-input" title="From date">
+  <input type="datetime-local" id="filter-to" class="form-input" title="To date">
+
+  <button type="button" class="btn btn-primary" id="apply-filters-btn">Apply Filters</button>
+
+  <div class="flex items-center gap-2" style="margin-left: auto;">
+    <button type="button" class="btn btn-secondary btn-sm" id="export-json-btn">Export JSON</button>
+    <button type="button" class="btn btn-secondary btn-sm" id="export-csv-btn">Export CSV</button>
+  </div>
+</div>
+
+<div class="flex items-center gap-3 mb-4 animate-fade-in">
+  <label class="toggle-switch">
+    <input type="checkbox" id="auto-refresh-toggle">
+    <span class="toggle-slider"></span>
+    <span class="toggle-label">Auto-refresh (30s)</span>
+  </label>
+  <span class="text-dim" style="font-size: 0.75rem;" id="refresh-status"></span>
+</div>
+
+<!-- Event Table -->
+<div class="data-table-responsive animate-fade-in">
+  <table class="data-table" id="logs-table">
+    <thead>
+      <tr>
+        <th class="col-time">Timestamp</th>
+        <th class="col-level">Event Type</th>
+        <th class="col-source">Contract</th>
+        <th class="col-chain">Chain</th>
+        <th class="col-message">Details</th>
+        <th class="col-value">Value</th>
+      </tr>
+    </thead>
+    <tbody id="logs-tbody">
+      <!-- Populated by JS -->
+    </tbody>
+  </table>
+</div>
+
+<!-- Empty State -->
+<div class="empty-state" id="logs-empty" style="display: none;">
+  <div class="empty-state-icon">&#9776;</div>
+  <div class="empty-state-title">No events found</div>
+  <div class="empty-state-desc">Adjust your filters or wait for new events to be detected.</div>
+</div>
+
+<!-- Pagination -->
+<div class="pagination" id="pagination-controls" style="display: none;">
+  <button type="button" class="btn btn-ghost btn-sm" id="page-prev">Previous</button>
+  <span class="page-info" id="page-info">Page 1 of 1</span>
+  <button type="button" class="btn btn-ghost btn-sm" id="page-next">Next</button>
+</div>
+
+<style>
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-4);
+    margin-top: var(--space-6);
+    padding: var(--space-4);
+  }
+  .page-info {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .col-time { width: 160px; white-space: nowrap; }
+  .col-level { width: 140px; }
+  .col-source { min-width: 140px; }
+  .col-chain { width: 100px; }
+  .col-message { min-width: 200px; }
+  .col-value { width: 120px; text-align: right; }
+
+  .log-row {
+    cursor: pointer;
+    border-left: 3px solid transparent;
+  }
+  .log-row:hover {
+    background: rgba(0, 217, 255, 0.04);
+  }
+  .log-row.severity-danger {
+    border-left-color: var(--accent-danger);
+    background: rgba(255, 107, 53, 0.03);
+  }
+  .log-row.severity-warning {
+    border-left-color: var(--accent-secondary);
+    background: rgba(255, 204, 0, 0.03);
+  }
+  .log-row.severity-info {
+    border-left-color: var(--accent-primary);
+    background: rgba(0, 217, 255, 0.03);
+  }
+  .log-row.severity-success {
+    border-left-color: var(--accent-success);
+    background: rgba(0, 230, 118, 0.03);
+  }
+
+  .log-detail-row td {
+    padding: 0;
+    border-bottom: none;
+  }
+  .log-detail-content {
+    padding: var(--space-4);
+    background: var(--bg-secondary);
+    border-left: 2px solid var(--accent-primary);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .contract-address {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+  }
+
+  .chain-badge {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    background: var(--accent-primary-dim);
+    color: var(--accent-primary);
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
+  @media (max-width: 1023px) {
+    .filter-bar .form-input[type="datetime-local"] {
+      width: auto;
+      min-width: 160px;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+
+  const { api, showToast, truncateAddress, formatTimestamp, formatChain, escapeHtml } = window.ScarpShield || {};
+  if (!api) return;
+
+  const PER_PAGE = 25;
+
+  let allLogs = [];
+  let filteredLogs = [];
+  let currentPage = 1;
+  let autoRefreshTimer = null;
+
+  const EVENT_TYPE_MAP = {
+    'Transfer': { badge: 'badge-info', severity: 'severity-info' },
+    'Approval': { badge: 'badge-success', severity: 'severity-success' },
+    'OwnershipTransferred': { badge: 'badge-danger', severity: 'severity-danger' },
+    'AdminCall': { badge: 'badge-warning', severity: 'severity-warning' },
+  };
+
+  /* ── Parse log fields from backend data ───────────────────── */
+  function parseLog(log) {
+    const meta = log.metadata || {};
+    let eventType = meta.event_type || '';
+    let contract = meta.contract || meta.address || '';
+    let chain = meta.chain || '';
+    let details = meta.details || log.message || '';
+    let value = meta.value || '';
+
+    // Fallback: try to infer from message
+    if (!eventType && log.message) {
+      const msg = log.message;
+      if (msg.includes('OwnershipTransferred')) eventType = 'OwnershipTransferred';
+      else if (msg.includes('Transfer')) eventType = 'Transfer';
+      else if (msg.includes('Approval')) eventType = 'Approval';
+      else if (msg.includes('admin') || msg.includes('Admin')) eventType = 'AdminCall';
+    }
+
+    return {
+      ...log,
+      eventType,
+      contract,
+      chain,
+      details,
+      value,
+      timestamp: log.timestamp || ''
+    };
+  }
+
+  /* ── Fetch Logs ───────────────────────────────────────────── */
+  async function fetchLogs() {
+    const search = document.getElementById('filter-search').value.trim().toLowerCase();
+
+    try {
+      const data = await api('GET', `/api/logs?page=1&per_page=200&search=${encodeURIComponent(search)}`);
+      allLogs = (data.logs || []).map(parseLog);
+      applyFilters();
+      updateRefreshStatus('Updated ' + new Date().toLocaleTimeString());
+    } catch (err) {
+      showToast('Failed to load logs', 'error');
+    }
+  }
+
+  function updateRefreshStatus(text) {
+    const el = document.getElementById('refresh-status');
+    if (el) el.textContent = text;
+  }
+
+  /* ── Apply Filters ────────────────────────────────────────── */
+  function applyFilters() {
+    const eventType = document.getElementById('filter-event-type').value;
+    const chain = document.getElementById('filter-chain').value;
+    const fromStr = document.getElementById('filter-from').value;
+    const toStr = document.getElementById('filter-to').value;
+
+    const fromDate = fromStr ? new Date(fromStr) : null;
+    const toDate = toStr ? new Date(toStr) : null;
+
+    filteredLogs = allLogs.filter(log => {
+      if (eventType && log.eventType !== eventType) return false;
+      if (chain && log.chain.toLowerCase() !== chain.toLowerCase()) return false;
+
+      if (fromDate || toDate) {
+        const ts = new Date(log.timestamp);
+        if (fromDate && ts < fromDate) return false;
+        if (toDate) {
+          const toEnd = new Date(toDate);
+          toEnd.setDate(toEnd.getDate() + 1);
+          if (ts >= toEnd) return false;
+        }
+      }
+      return true;
+    });
+
+    currentPage = 1;
+    renderTable();
+    renderPagination();
+  }
+
+  /* ── Render Table ─────────────────────────────────────────── */
+  function renderTable() {
+    const tbody = document.getElementById('logs-tbody');
+    const empty = document.getElementById('logs-empty');
+    const table = document.getElementById('logs-table');
+
+    if (!filteredLogs.length) {
+      tbody.innerHTML = '';
+      empty.style.display = '';
+      table.style.display = 'none';
+      return;
+    }
+
+    empty.style.display = 'none';
+    table.style.display = '';
+
+    const start = (currentPage - 1) * PER_PAGE;
+    const pageLogs = filteredLogs.slice(start, start + PER_PAGE);
+
+    tbody.innerHTML = pageLogs.map((log, idx) => {
+      const globalIdx = start + idx;
+      const style = EVENT_TYPE_MAP[log.eventType] || { badge: 'badge-info', severity: 'severity-info' };
+      const chainLabel = formatChain(log.chain);
+
+      return `
+        <tr class="log-row ${style.severity}" data-index="${globalIdx}">
+          <td>${escapeHtml(formatTimestamp(log.timestamp))}</td>
+          <td><span class="badge ${style.badge}">${escapeHtml(log.eventType || 'Unknown')}</span></td>
+          <td class="contract-address">${escapeHtml(truncateAddress(log.contract, 8, 6))}</td>
+          <td><span class="chain-badge">${escapeHtml(chainLabel)}</span></td>
+          <td>${escapeHtml(log.details)}</td>
+          <td class="col-value">${escapeHtml(log.value || '--')}</td>
+        </tr>
+        <tr class="log-detail-row" id="detail-${globalIdx}" style="display: none;">
+          <td colspan="6">
+            <div class="log-detail-content">${escapeHtml(JSON.stringify(log, null, 2))}</div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    // Attach expand handlers
+    tbody.querySelectorAll('.log-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const idx = row.dataset.index;
+        const detail = document.getElementById('detail-' + idx);
+        if (detail) {
+          detail.style.display = detail.style.display === 'none' ? '' : 'none';
+        }
+      });
+    });
+  }
+
+  /* ── Render Pagination ────────────────────────────────────── */
+  function renderPagination() {
+    const controls = document.getElementById('pagination-controls');
+    const info = document.getElementById('page-info');
+    const prev = document.getElementById('page-prev');
+    const next = document.getElementById('page-next');
+
+    const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PER_PAGE));
+
+    if (filteredLogs.length <= PER_PAGE) {
+      controls.style.display = 'none';
+      return;
+    }
+    controls.style.display = '';
+
+    info.textContent = `Page ${currentPage} of ${totalPages}`;
+    prev.disabled = currentPage <= 1;
+    next.disabled = currentPage >= totalPages;
+  }
+
+  function goToPage(page) {
+    const totalPages = Math.ceil(filteredLogs.length / PER_PAGE);
+    if (page < 1 || page > totalPages) return;
+    currentPage = page;
+    renderTable();
+    renderPagination();
+  }
+
+  /* ── Export ───────────────────────────────────────────────── */
+  function downloadFile(content, filename, type) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportJson() {
+    if (!filteredLogs.length) {
+      showToast('No data to export', 'warning');
+      return;
+    }
+    const content = JSON.stringify(filteredLogs, null, 2);
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    downloadFile(content, `scarpshield-logs-${timestamp}.json`, 'application/json');
+    showToast('JSON exported', 'success');
+  }
+
+  function exportCsv() {
+    if (!filteredLogs.length) {
+      showToast('No data to export', 'warning');
+      return;
+    }
+    const headers = ['Timestamp', 'Event Type', 'Contract', 'Chain', 'Details', 'Value'];
+    const rows = filteredLogs.map(log => [
+      log.timestamp,
+      log.eventType || '',
+      log.contract || '',
+      log.chain || '',
+      (log.details || '').replace(/"/g, '""'),
+      log.value || ''
+    ]);
+
+    const csv = [
+      headers.join(','),
+      ...rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    downloadFile(csv, `scarpshield-logs-${timestamp}.csv`, 'text/csv');
+    showToast('CSV exported', 'success');
+  }
+
+  /* ── Auto Refresh ─────────────────────────────────────────── */
+  function setAutoRefresh(enabled) {
+    if (autoRefreshTimer) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
+    if (enabled) {
+      autoRefreshTimer = setInterval(fetchLogs, 30000);
+      updateRefreshStatus('Auto-refresh enabled');
+    } else {
+      updateRefreshStatus('');
+    }
+  }
+
+  /* ── Event Listeners ──────────────────────────────────────── */
+  document.getElementById('apply-filters-btn')?.addEventListener('click', () => {
+    currentPage = 1;
+    fetchLogs();
+  });
+
+  document.getElementById('page-prev')?.addEventListener('click', () => goToPage(currentPage - 1));
+  document.getElementById('page-next')?.addEventListener('click', () => goToPage(currentPage + 1));
+  document.getElementById('export-json-btn')?.addEventListener('click', exportJson);
+  document.getElementById('export-csv-btn')?.addEventListener('click', exportCsv);
+
+  document.getElementById('auto-refresh-toggle')?.addEventListener('change', (e) => {
+    setAutoRefresh(e.target.checked);
+  });
+
+  // Enter key on search
+  document.getElementById('filter-search')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      currentPage = 1;
+      fetchLogs();
+    }
+  });
+
+  /* ── Init ─────────────────────────────────────────────────── */
+  fetchLogs();
+})();
+</script>
+{% endblock %}

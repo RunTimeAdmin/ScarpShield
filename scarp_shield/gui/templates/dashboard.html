@@ -1,0 +1,454 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+  <h1>Dashboard</h1>
+  <p>Real-time overview of your smart contract monitoring activity.</p>
+</div>
+
+<!-- Hero Stats Row -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-card-header">
+      <span class="stat-card-label">Active Contracts</span>
+      <div class="stat-card-icon">&#x2B21;</div>
+    </div>
+    <div class="stat-card-value" id="stat-contracts">0</div>
+    <div class="stat-card-delta">Watched for events</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-card-header">
+      <span class="stat-card-label">Alert Channels</span>
+      <div class="stat-card-icon">&#9889;</div>
+    </div>
+    <div class="stat-card-value" id="stat-alerts">0</div>
+    <div class="stat-card-delta">Enabled &amp; active</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-card-header">
+      <span class="stat-card-label">Events Detected</span>
+      <div class="stat-card-icon">&#x25C9;</div>
+    </div>
+    <div class="stat-card-value" id="stat-events">0</div>
+    <div class="stat-card-delta">Since startup</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-card-header">
+      <span class="stat-card-label">Monitoring Status</span>
+      <div class="stat-card-icon" id="status-icon-dot">
+        <span class="status-dot status-dot-inactive" id="status-dot-lg"></span>
+      </div>
+    </div>
+    <div class="stat-card-value" style="font-size: 1.25rem; margin-top: 4px;">
+      <span class="badge badge-info" id="status-badge">Stopped</span>
+    </div>
+    <div class="stat-card-delta" id="status-subtext">Click Start to begin</div>
+  </div>
+</div>
+
+<!-- Monitor Controls -->
+<div class="dashboard-section">
+  <div class="card">
+    <div class="card-body" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-4);">
+      <div>
+        <h3 style="font-size: 1rem; margin-bottom: var(--space-1);">Monitor Control</h3>
+        <p class="text-muted" style="font-size: 0.875rem;">
+          Polling interval: <span class="font-mono" id="poll-interval">--</span> seconds
+        </p>
+      </div>
+      <button type="button" class="btn btn-lg btn-primary" id="monitor-toggle-btn">
+        <span id="monitor-btn-icon">&#9654;</span>
+        <span id="monitor-btn-text">Start Monitoring</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Live Event Feed -->
+<div class="dashboard-section">
+  <div class="dashboard-section-title">
+    <h2>&#9733; Live Event Feed</h2>
+    <span class="badge badge-info" id="sse-status-badge">SSE Connected</span>
+  </div>
+  <div class="card">
+    <div class="card-body" style="padding: 0; max-height: 480px; overflow-y: auto;" id="event-feed-container">
+      <div class="event-feed" id="event-feed">
+        <div class="empty-state" id="event-empty-state">
+          <div class="empty-state-icon">&#9734;</div>
+          <div class="empty-state-title">No events yet</div>
+          <div class="empty-state-desc">Events will appear here in real-time once monitoring starts and activity is detected.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Contract Overview Cards -->
+<div class="dashboard-section">
+  <div class="dashboard-section-title">
+    <h2>&#11041; Contracts Overview</h2>
+    <a href="/contracts" class="btn btn-sm btn-secondary">View All</a>
+  </div>
+  <div class="contract-grid" id="contract-grid">
+    <!-- Populated by JS -->
+    <div class="empty-state" id="contracts-empty-state">
+      <div class="empty-state-icon">&#11041;</div>
+      <div class="empty-state-title">No contracts configured</div>
+      <div class="empty-state-desc">Add your first contract to start monitoring on-chain events.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="dashboard-section">
+  <div class="dashboard-section-title">
+    <h2>&#9881; Quick Actions</h2>
+  </div>
+  <div class="card">
+    <div class="card-body" style="display: flex; gap: var(--space-3); flex-wrap: wrap;">
+      <a href="/contracts" class="btn btn-primary">
+        <span>&#43;</span> Add Contract
+      </a>
+      <button type="button" class="btn btn-secondary" id="btn-test-alerts">
+        <span>&#9889;</span> Test Alerts
+      </button>
+      <a href="/logs" class="btn btn-ghost">
+        <span>&#9776;</span> View Logs
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  'use strict';
+
+  const { api, showToast, connectSSE, truncateAddress, formatTimestamp, formatChain } = window.ScarpShield || {};
+
+  let isMonitoring = false;
+  let eventCount = 0;
+  const MAX_VISIBLE_EVENTS = 50;
+  const eventFeedEl = document.getElementById('event-feed');
+  const eventEmptyEl = document.getElementById('event-empty-state');
+  const contractGridEl = document.getElementById('contract-grid');
+  const contractsEmptyEl = document.getElementById('contracts-empty-state');
+
+  /* ── Helpers ──────────────────────────────────────────────── */
+
+  function getEventClass(eventType) {
+    if (!eventType) return 'info';
+    const t = String(eventType).toLowerCase();
+    if (t.includes('transfer')) return 'transfer';
+    if (t.includes('approval')) return 'approval';
+    if (t.includes('owner')) return 'ownership';
+    if (t.includes('admin')) return 'admin';
+    return 'info';
+  }
+
+  function getEventBadgeClass(eventType) {
+    if (!eventType) return 'badge-info';
+    const t = String(eventType).toLowerCase();
+    if (t.includes('transfer')) return 'badge-info';
+    if (t.includes('approval')) return 'badge-warning';
+    if (t.includes('owner')) return 'badge-danger';
+    if (t.includes('admin')) return 'badge-warning';
+    return 'badge-info';
+  }
+
+  function getEventIcon(eventType) {
+    if (!eventType) return '&#9432;';
+    const t = String(eventType).toLowerCase();
+    if (t.includes('transfer')) return '&#8644;';
+    if (t.includes('approval')) return '&#10003;';
+    if (t.includes('owner')) return '&#9888;';
+    if (t.includes('admin')) return '&#9881;';
+    return '&#9432;';
+  }
+
+  function getChainColor(chain) {
+    const map = {
+      ethereum: 'var(--accent-primary)',
+      polygon: 'var(--accent-success)',
+      bsc: '#f0b90b',
+      arbitrum: '#28a0f0',
+      base: '#0052ff'
+    };
+    return map[String(chain).toLowerCase()] || 'var(--accent-primary)';
+  }
+
+  /* ── Stats & Status ───────────────────────────────────────── */
+
+  async function loadStatus() {
+    try {
+      const data = await api('GET', '/api/status');
+      isMonitoring = data.running === true;
+
+      document.getElementById('stat-contracts').textContent = data.contract_count ?? 0;
+      document.getElementById('stat-alerts').textContent = Array.isArray(data.enabled_alerts) ? data.enabled_alerts.length : 0;
+      document.getElementById('stat-events').textContent = data.event_log_count ?? 0;
+      document.getElementById('poll-interval').textContent = data.poll_interval ?? 15;
+
+      eventCount = data.event_log_count ?? eventCount;
+
+      updateMonitorUI(isMonitoring);
+    } catch (err) {
+      console.warn('[Dashboard] Failed to load status:', err);
+    }
+  }
+
+  function updateMonitorUI(running) {
+    isMonitoring = running;
+    const btn = document.getElementById('monitor-toggle-btn');
+    const btnText = document.getElementById('monitor-btn-text');
+    const btnIcon = document.getElementById('monitor-btn-icon');
+    const badge = document.getElementById('status-badge');
+    const dot = document.getElementById('status-dot-lg');
+    const subtext = document.getElementById('status-subtext');
+
+    if (running) {
+      btn.className = 'btn btn-lg btn-danger';
+      btnText.textContent = 'Stop Monitoring';
+      btnIcon.innerHTML = '&#9632;';
+      badge.className = 'badge badge-success';
+      badge.textContent = 'Running';
+      dot.className = 'status-dot status-dot-active status-dot-pulse';
+      subtext.textContent = 'Actively polling contracts';
+    } else {
+      btn.className = 'btn btn-lg btn-primary';
+      btnText.textContent = 'Start Monitoring';
+      btnIcon.innerHTML = '&#9654;';
+      badge.className = 'badge badge-info';
+      badge.textContent = 'Stopped';
+      dot.className = 'status-dot status-dot-inactive';
+      subtext.textContent = 'Click Start to begin';
+    }
+  }
+
+  async function toggleMonitor() {
+    const btn = document.getElementById('monitor-toggle-btn');
+    btn.disabled = true;
+
+    try {
+      if (isMonitoring) {
+        await api('POST', '/api/monitor/stop');
+        showToast('Monitoring stopped', 'info');
+        updateMonitorUI(false);
+      } else {
+        await api('POST', '/api/monitor/start');
+        showToast('Monitoring started', 'success');
+        updateMonitorUI(true);
+      }
+    } catch (err) {
+      showToast(err.data?.error || err.message || 'Failed to toggle monitoring', 'error');
+    } finally {
+      btn.disabled = false;
+      loadStatus();
+    }
+  }
+
+  /* ── Event Feed ───────────────────────────────────────────── */
+
+  function addEventToFeed(eventData) {
+    if (eventEmptyEl) {
+      eventEmptyEl.style.display = 'none';
+    }
+
+    const meta = eventData.metadata || {};
+    const eventType = meta.event_type || meta.type || 'Event';
+    const eventClass = getEventClass(eventType);
+    const badgeClass = getEventBadgeClass(eventType);
+    const icon = getEventIcon(eventType);
+    const ts = eventData.timestamp || new Date().toISOString();
+    const address = meta.contract || meta.address || '';
+    const chain = meta.chain || meta.network || '';
+    const details = eventData.message || meta.details || '';
+
+    const item = document.createElement('div');
+    item.className = `event-item ${eventClass} animate-fade-in`;
+    item.innerHTML = `
+      <div class="event-icon">${icon}</div>
+      <div class="event-body">
+        <div class="event-title">
+          <span class="badge ${badgeClass}">${escapeHtml(String(eventType).toUpperCase())}</span>
+          ${address ? `<span class="font-mono" style="margin-left: var(--space-2);">${truncateAddress(address)}</span>` : ''}
+        </div>
+        <div class="event-meta">
+          ${chain ? `<span class="event-chain" style="color: ${getChainColor(chain)};">${formatChain(chain)}</span>` : ''}
+          <span>${escapeHtml(details)}</span>
+        </div>
+      </div>
+      <div class="event-time" title="${escapeHtml(ts)}">${formatTimestamp(ts)}</div>
+    `;
+
+    eventFeedEl.insertBefore(item, eventFeedEl.firstChild);
+
+    // Keep max visible events
+    while (eventFeedEl.children.length > MAX_VISIBLE_EVENTS) {
+      const last = eventFeedEl.lastElementChild;
+      if (last && last.id !== 'event-empty-state') {
+        last.remove();
+      } else {
+        break;
+      }
+    }
+
+    eventCount++;
+    document.getElementById('stat-events').textContent = eventCount;
+  }
+
+  function escapeHtml(str) {
+    if (typeof str !== 'string') return String(str);
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  /* ── Contracts ────────────────────────────────────────────── */
+
+  async function loadContracts() {
+    try {
+      const contracts = await api('GET', '/api/contracts');
+
+      if (!Array.isArray(contracts) || contracts.length === 0) {
+        if (contractsEmptyEl) contractsEmptyEl.style.display = '';
+        return;
+      }
+
+      if (contractsEmptyEl) contractsEmptyEl.style.display = 'none';
+
+      // Clear existing contract cards (keep empty state element hidden)
+      contractGridEl.querySelectorAll('.contract-card, .contract-card-add').forEach(el => el.remove());
+
+      contracts.forEach((c) => {
+        const card = document.createElement('div');
+        card.className = 'contract-card animate-fade-in';
+        const label = c.label || 'Unnamed';
+        const addr = c.address || '';
+        const chain = c.chain || 'ethereum';
+        const events = Array.isArray(c.events) ? c.events : [];
+        const chainColor = getChainColor(chain);
+
+        card.innerHTML = `
+          <div class="contract-card-header">
+            <div>
+              <div class="contract-card-name">${escapeHtml(label)}</div>
+              <div class="contract-card-address">${truncateAddress(addr, 8, 6)}</div>
+            </div>
+            <span class="contract-card-chain" style="background: ${chainColor}22; color: ${chainColor};">${formatChain(chain)}</span>
+          </div>
+          <div class="contract-card-events">
+            ${events.map(e => `<span class="badge badge-info">${escapeHtml(e)}</span>`).join('')}
+          </div>
+          <div class="contract-card-footer">
+            <span class="text-muted" style="font-size: 0.75rem;">${events.length} event type${events.length !== 1 ? 's' : ''}</span>
+            <a href="/contracts" class="btn btn-sm btn-ghost">Manage</a>
+          </div>
+        `;
+        contractGridEl.appendChild(card);
+      });
+
+      // Add "Add Contract" card
+      const addCard = document.createElement('a');
+      addCard.href = '/contracts';
+      addCard.className = 'contract-card contract-card-add animate-fade-in';
+      addCard.style.display = 'flex';
+      addCard.style.flexDirection = 'column';
+      addCard.style.alignItems = 'center';
+      addCard.style.justifyContent = 'center';
+      addCard.style.minHeight = '180px';
+      addCard.style.borderStyle = 'dashed';
+      addCard.style.cursor = 'pointer';
+      addCard.innerHTML = `
+        <div style="font-size: 2rem; color: var(--text-dim); margin-bottom: var(--space-3);">+</div>
+        <div style="font-weight: 600; color: var(--text-muted);">Add Contract</div>
+      `;
+      contractGridEl.appendChild(addCard);
+    } catch (err) {
+      console.warn('[Dashboard] Failed to load contracts:', err);
+    }
+  }
+
+  /* ── Test Alerts ──────────────────────────────────────────── */
+
+  async function testAlerts() {
+    const btn = document.getElementById('btn-test-alerts');
+    btn.disabled = true;
+    try {
+      const data = await api('POST', '/api/alerts/test');
+      showToast(data.message || 'Test alert dispatched', 'success');
+    } catch (err) {
+      showToast(err.data?.error || err.message || 'Failed to send test alert', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /* ── SSE Handling ─────────────────────────────────────────── */
+
+  function setupSSE() {
+    const sseBadge = document.getElementById('sse-status-badge');
+
+    window.addEventListener('sse-message', (e) => {
+      const data = e.detail;
+      if (data && data.type !== 'ping') {
+        addEventToFeed(data);
+      }
+    });
+
+    window.addEventListener('sse-alert', (e) => {
+      addEventToFeed(e.detail);
+    });
+
+    window.addEventListener('sse-status', (e) => {
+      if (typeof e.detail?.running === 'boolean') {
+        updateMonitorUI(e.detail.running);
+      }
+    });
+
+    // Update SSE badge based on connection status
+    const connDot = document.getElementById('conn-dot');
+    if (connDot) {
+      const observer = new MutationObserver(() => {
+        const connected = connDot.classList.contains('status-dot-active');
+        if (connected) {
+          sseBadge.className = 'badge badge-success';
+          sseBadge.textContent = 'SSE Connected';
+        } else {
+          sseBadge.className = 'badge badge-danger';
+          sseBadge.textContent = 'SSE Disconnected';
+        }
+      });
+      observer.observe(connDot, { attributes: true, attributeFilter: ['class'] });
+    }
+  }
+
+  /* ── Initialization ───────────────────────────────────────── */
+
+  function initDashboard() {
+    loadStatus();
+    loadContracts();
+    setupSSE();
+
+    document.getElementById('monitor-toggle-btn').addEventListener('click', toggleMonitor);
+    document.getElementById('btn-test-alerts').addEventListener('click', testAlerts);
+
+    // Refresh stats every 10 seconds
+    setInterval(loadStatus, 10000);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDashboard);
+  } else {
+    initDashboard();
+  }
+})();
+</script>
+{% endblock %}

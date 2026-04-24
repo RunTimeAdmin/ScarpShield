@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="page-header animate-fade-in">
+  <h1>Settings</h1>
+  <p>Configure RPC endpoints, polling behavior, and view your system configuration.</p>
+</div>
+
+<div class="settings-form animate-fade-in">
+
+  <!-- RPC Configuration -->
+  <section class="card settings-section">
+    <div class="card-header">
+      <h3>RPC Configuration</h3>
+    </div>
+    <div class="card-body">
+      <p class="settings-section-desc">Set the JSON-RPC endpoints used to monitor each blockchain network.</p>
+      <div class="settings-grid" id="rpc-settings">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+    <div class="card-footer">
+      <button type="button" class="btn btn-primary" id="save-rpc-btn">Save RPC Settings</button>
+    </div>
+  </section>
+
+  <!-- Polling Interval -->
+  <section class="card settings-section">
+    <div class="card-header">
+      <h3>Polling Interval</h3>
+    </div>
+    <div class="card-body">
+      <p class="settings-section-desc">How frequently ScarpShield checks for new on-chain events.</p>
+      <div class="settings-grid two-col">
+        <div class="form-group">
+          <label class="form-label" for="poll-interval">Interval (seconds)</label>
+          <input type="range" id="poll-interval" class="form-input" min="5" max="120" step="1">
+          <div class="flex items-center justify-between mt-2">
+            <span class="text-dim" style="font-size: 0.75rem;">5s</span>
+            <span class="font-mono text-accent" id="poll-interval-value">15s</span>
+            <span class="text-dim" style="font-size: 0.75rem;">120s</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Impact</label>
+          <p class="form-hint" style="margin-top: var(--space-2);">
+            Shorter intervals provide faster alerts but consume more RPC quota and bandwidth.
+            Longer intervals reduce load but may delay critical event detection.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="card-footer">
+      <button type="button" class="btn btn-primary" id="save-interval-btn">Update Interval</button>
+    </div>
+  </section>
+
+  <!-- Configuration Viewer -->
+  <section class="card settings-section">
+    <div class="card-header">
+      <h3>Configuration Viewer</h3>
+      <button type="button" class="btn btn-secondary btn-sm" id="toggle-edit-btn">Toggle Edit Mode</button>
+    </div>
+    <div class="card-body">
+      <div id="config-viewer">
+        <pre class="json-viewer"><code id="config-json"></code></pre>
+      </div>
+      <div id="config-editor" style="display: none;">
+        <div class="form-group">
+          <label class="form-label" for="config-textarea">Raw Config (JSON)</label>
+          <textarea id="config-textarea" class="form-textarea" rows="20" spellcheck="false"></textarea>
+          <p class="form-hint text-danger">Warning: Manual editing can break your configuration. Validate JSON before saving.</p>
+        </div>
+      </div>
+    </div>
+    <div class="card-footer" id="config-footer" style="display: none;">
+      <button type="button" class="btn btn-primary" id="save-config-btn">Save Config</button>
+    </div>
+  </section>
+
+  <!-- About -->
+  <section class="card settings-section">
+    <div class="card-header">
+      <h3>About ScarpShield</h3>
+    </div>
+    <div class="card-body">
+      <div class="flex items-center gap-4 mb-4">
+        <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="ScarpShield" style="width: 48px; height: 48px;">
+        <div>
+          <div style="font-size: 1.25rem; font-weight: 700;">ScarpShield <span class="font-mono text-muted" style="font-size: 0.875rem;">v0.1.0</span></div>
+          <div class="text-dim" style="font-size: 0.875rem; margin-top: 2px;">THE OUTER WALL OF DEFENSE</div>
+        </div>
+      </div>
+      <p class="text-secondary" style="font-size: 0.9375rem; line-height: 1.6;">
+        ScarpShield is the official smart-contract monitoring tool for
+        <a href="https://counterscarp.io" target="_blank" rel="noopener">CounterScarp.io</a>.
+        It watches your deployed contracts across multiple EVM chains and dispatches
+        real-time alerts whenever transfers, approvals, ownership changes, or
+        administrative calls are detected.
+      </p>
+    </div>
+    <div class="card-footer" style="justify-content: flex-start;">
+      <button type="button" class="btn btn-danger" id="reset-defaults-btn">Reset to Defaults</button>
+    </div>
+  </section>
+
+</div>
+
+<style>
+  .json-viewer {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    margin: 0;
+    overflow-x: auto;
+    max-height: 480px;
+    overflow-y: auto;
+  }
+  .json-viewer code {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    white-space: pre;
+  }
+  .json-key { color: #7ee787; }
+  .json-string { color: #a5d6ff; }
+  .json-number { color: #79c0ff; }
+  .json-boolean { color: #ff7b72; }
+  .json-null { color: #ff7b72; }
+
+  .rpc-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .rpc-row:last-child {
+    border-bottom: none;
+  }
+  .rpc-chain {
+    min-width: 100px;
+    flex-shrink: 0;
+  }
+  .rpc-input {
+    flex: 1;
+  }
+  .rpc-input input {
+    width: 100%;
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+
+  const { api, showToast, showModal, hideModal, escapeHtml } = window.ScarpShield || {};
+  if (!api) return;
+
+  let currentConfig = {};
+
+  const CHAINS = [
+    { key: 'ethereum', label: 'Ethereum', badgeClass: 'badge-info' },
+    { key: 'polygon', label: 'Polygon', badgeClass: 'badge-success' },
+    { key: 'bsc', label: 'BSC', badgeClass: 'badge-warning' },
+    { key: 'arbitrum', label: 'Arbitrum', badgeClass: 'badge-info' },
+    { key: 'base', label: 'Base', badgeClass: 'badge-success' },
+  ];
+
+  /* ── Syntax Highlighting ──────────────────────────────────── */
+  function highlightJson(obj) {
+    const json = JSON.stringify(obj, null, 2);
+    return escapeHtml(json)
+      .replace(/"(\w+)":/g, '<span class="json-key">"$1"</span>:')
+      .replace(/: "([^"]*)"/g, ': <span class="json-string">"$1"</span>')
+      .replace(/: (\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
+      .replace(/: (true|false)/g, ': <span class="json-boolean">$1</span>')
+      .replace(/: (null)/g, ': <span class="json-null">$1</span>');
+  }
+
+  /* ── Load Config ──────────────────────────────────────────── */
+  async function loadConfig() {
+    try {
+      currentConfig = await api('GET', '/api/config');
+      renderRpcSettings();
+      renderPollInterval();
+      renderConfigViewer();
+    } catch (err) {
+      showToast('Failed to load configuration', 'error');
+    }
+  }
+
+  /* ── Render RPC Settings ──────────────────────────────────── */
+  function renderRpcSettings() {
+    const container = document.getElementById('rpc-settings');
+    if (!container) return;
+
+    const endpoints = currentConfig.rpc_endpoints || {};
+    container.innerHTML = CHAINS.map(chain => `
+      <div class="rpc-row">
+        <div class="rpc-chain">
+          <span class="badge ${chain.badgeClass}">${escapeHtml(chain.label)}</span>
+        </div>
+        <div class="rpc-input">
+          <input type="url" class="form-input" id="rpc-${chain.key}"
+            value="${escapeHtml(endpoints[chain.key] || '')}"
+            placeholder="https://...">
+        </div>
+      </div>
+    `).join('');
+  }
+
+  /* ── Render Polling Interval ──────────────────────────────── */
+  function renderPollInterval() {
+    const slider = document.getElementById('poll-interval');
+    const display = document.getElementById('poll-interval-value');
+    if (!slider || !display) return;
+
+    const val = currentConfig.poll_interval_seconds || 15;
+    slider.value = val;
+    display.textContent = val + 's';
+
+    slider.addEventListener('input', () => {
+      display.textContent = slider.value + 's';
+    });
+  }
+
+  /* ── Render Config Viewer ─────────────────────────────────── */
+  function renderConfigViewer() {
+    const viewer = document.getElementById('config-json');
+    const textarea = document.getElementById('config-textarea');
+    if (viewer) viewer.innerHTML = highlightJson(currentConfig);
+    if (textarea) textarea.value = JSON.stringify(currentConfig, null, 2);
+  }
+
+  /* ── Save RPC Settings ────────────────────────────────────── */
+  async function saveRpcSettings() {
+    const endpoints = {};
+    for (const chain of CHAINS) {
+      const input = document.getElementById('rpc-' + chain.key);
+      if (input) endpoints[chain.key] = input.value.trim();
+    }
+
+    const updated = { ...currentConfig, rpc_endpoints: endpoints };
+    try {
+      await api('POST', '/api/config', updated);
+      currentConfig = updated;
+      showToast('RPC settings saved', 'success');
+    } catch (err) {
+      showToast('Failed to save RPC settings', 'error');
+    }
+  }
+
+  /* ── Save Interval ────────────────────────────────────────── */
+  async function saveInterval() {
+    const slider = document.getElementById('poll-interval');
+    const seconds = parseInt(slider.value, 10);
+
+    const updated = { ...currentConfig, poll_interval_seconds: seconds };
+    try {
+      await api('POST', '/api/config', updated);
+      currentConfig = updated;
+      showToast('Polling interval updated', 'success');
+    } catch (err) {
+      showToast('Failed to update interval', 'error');
+    }
+  }
+
+  /* ── Toggle Edit Mode ─────────────────────────────────────── */
+  function toggleEditMode() {
+    const viewer = document.getElementById('config-viewer');
+    const editor = document.getElementById('config-editor');
+    const footer = document.getElementById('config-footer');
+    const textarea = document.getElementById('config-textarea');
+
+    const isEditing = editor.style.display !== 'none';
+    if (isEditing) {
+      editor.style.display = 'none';
+      viewer.style.display = '';
+      footer.style.display = 'none';
+    } else {
+      textarea.value = JSON.stringify(currentConfig, null, 2);
+      editor.style.display = '';
+      viewer.style.display = 'none';
+      footer.style.display = '';
+    }
+  }
+
+  /* ── Save Config (raw) ────────────────────────────────────── */
+  async function saveRawConfig() {
+    const textarea = document.getElementById('config-textarea');
+    let parsed;
+    try {
+      parsed = JSON.parse(textarea.value);
+    } catch (e) {
+      showToast('Invalid JSON: ' + e.message, 'error');
+      return;
+    }
+
+    try {
+      await api('POST', '/api/config', parsed);
+      currentConfig = parsed;
+      renderRpcSettings();
+      renderPollInterval();
+      document.getElementById('config-json').innerHTML = highlightJson(currentConfig);
+      toggleEditMode();
+      showToast('Configuration saved', 'success');
+    } catch (err) {
+      showToast('Failed to save configuration', 'error');
+    }
+  }
+
+  /* ── Reset to Defaults ────────────────────────────────────── */
+  async function resetToDefaults() {
+    const confirmed = await showModal({
+      title: 'Reset Configuration?',
+      body: '<p>Are you sure you want to reset all settings to their default values? This cannot be undone.</p>',
+      confirmText: 'Reset',
+      danger: true
+    });
+
+    if (!confirmed) return;
+
+    try {
+      await api('POST', '/api/config/init');
+      showToast('Configuration reset to defaults', 'success');
+      await loadConfig();
+    } catch (err) {
+      showToast('Failed to reset configuration', 'error');
+    }
+  }
+
+  /* ── Setup Listeners ──────────────────────────────────────── */
+  document.getElementById('save-rpc-btn')?.addEventListener('click', saveRpcSettings);
+  document.getElementById('save-interval-btn')?.addEventListener('click', saveInterval);
+  document.getElementById('toggle-edit-btn')?.addEventListener('click', toggleEditMode);
+  document.getElementById('save-config-btn')?.addEventListener('click', saveRawConfig);
+  document.getElementById('reset-defaults-btn')?.addEventListener('click', resetToDefaults);
+
+  /* ── Init ─────────────────────────────────────────────────── */
+  loadConfig();
+})();
+</script>
+{% endblock %}

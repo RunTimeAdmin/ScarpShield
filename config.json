@@ -1,0 +1,56 @@
+{
+  "project": "CounterScarp.io",
+  "tool": "ScarpShield",
+  "version": "0.1.0",
+  "contracts": [],
+  "rpc_endpoints": {
+    "ethereum": "https://eth.llamarpc.com",
+    "polygon": "https://polygon-rpc.com",
+    "bsc": "https://bsc-dataseed.binance.org",
+    "arbitrum": "https://arb1.arbitrum.io/rpc",
+    "base": "https://mainnet.base.org"
+  },
+  "poll_interval_seconds": 15,
+  "alerts": {
+    "console": {
+      "enabled": true,
+      "settings": {}
+    },
+    "email": {
+      "enabled": false,
+      "settings": {
+        "smtp_host": "",
+        "smtp_port": 587,
+        "smtp_user": "",
+        "smtp_password": "",
+        "from_address": "",
+        "to_addresses": []
+      }
+    },
+    "discord": {
+      "enabled": false,
+      "settings": {
+        "webhook_url": ""
+      }
+    },
+    "slack": {
+      "enabled": false,
+      "settings": {
+        "webhook_url": ""
+      }
+    },
+    "telegram": {
+      "enabled": false,
+      "settings": {
+        "bot_token": "",
+        "chat_id": ""
+      }
+    }
+  },
+  "filters": {
+    "min_transfer_value_eth": 0.0,
+    "watch_admin_events": true,
+    "watch_large_transfers": true,
+    "watch_approvals": true
+  }
+}

@@ -1,0 +1,589 @@
+{% extends "base.html" %}
+
+{% block title %}Alerts{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1>Alert Channels</h1>
+      <p>Configure how and where ScarpShield delivers notifications.</p>
+    </div>
+    <button type="button" class="btn btn-secondary" id="btn-test-all-header">Test All Alerts</button>
+  </div>
+</div>
+
+<!-- Alert Channels Grid -->
+<div class="alert-channels-grid" id="alert-channels-grid">
+
+  <!-- Console -->
+  <div class="alert-channel-card" id="card-console" data-channel="console">
+    <div class="alert-channel-header">
+      <div class="alert-channel-name">
+        <div class="alert-channel-icon">&#128421;</div>
+        <span>Console</span>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle-console" data-channel="console">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="alert-channel-desc">
+      Log alerts to the application console. Always available.
+    </div>
+    <div class="alert-channel-footer">
+      <div class="flex items-center gap-2">
+        <span class="status-dot status-dot-active" id="status-dot-console"></span>
+        <span class="text-muted" id="status-text-console">Always configured</span>
+      </div>
+      <span class="badge badge-success" id="badge-console">Built-in</span>
+    </div>
+  </div>
+
+  <!-- Email -->
+  <div class="alert-channel-card" id="card-email" data-channel="email">
+    <div class="alert-channel-header">
+      <div class="alert-channel-name">
+        <div class="alert-channel-icon">&#9993;</div>
+        <span>Email</span>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle-email" data-channel="email">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="alert-channel-desc">
+      Send alert notifications via SMTP email.
+    </div>
+    <div class="alert-channel-footer">
+      <div class="flex items-center gap-2">
+        <span class="status-dot" id="status-dot-email"></span>
+        <span class="text-muted" id="status-text-email">Not configured</span>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-config-email">Configure</button>
+    </div>
+    <div class="setup-form" id="setup-email" style="display:none;">
+      <div class="divider"></div>
+      <div class="settings-grid two-col">
+        <div class="form-group">
+          <label class="form-label" for="email-smtp-host">SMTP Host</label>
+          <input type="text" class="form-input" id="email-smtp-host" placeholder="smtp.example.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="email-smtp-port">SMTP Port</label>
+          <input type="number" class="form-input" id="email-smtp-port" placeholder="587">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="email-smtp-user">Username</label>
+          <input type="text" class="form-input" id="email-smtp-user" placeholder="user@example.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="email-smtp-password">Password</label>
+          <input type="password" class="form-input" id="email-smtp-password" placeholder="••••••••">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="email-from">From Address</label>
+          <input type="text" class="form-input" id="email-from" placeholder="alerts@example.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="email-to">To Address</label>
+          <input type="text" class="form-input" id="email-to" placeholder="admin@example.com">
+        </div>
+      </div>
+      <div class="flex items-center gap-3 mt-4">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-save-email">Save</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-test-email">Test</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Discord -->
+  <div class="alert-channel-card" id="card-discord" data-channel="discord">
+    <div class="alert-channel-header">
+      <div class="alert-channel-name">
+        <div class="alert-channel-icon">&#128172;</div>
+        <span>Discord</span>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle-discord" data-channel="discord">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="alert-channel-desc">
+      Push alerts to a Discord channel via webhook.
+    </div>
+    <div class="alert-channel-footer">
+      <div class="flex items-center gap-2">
+        <span class="status-dot" id="status-dot-discord"></span>
+        <span class="text-muted" id="status-text-discord">Not configured</span>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-config-discord">Configure</button>
+    </div>
+    <div class="setup-form" id="setup-discord" style="display:none;">
+      <div class="divider"></div>
+      <div class="form-group">
+        <label class="form-label" for="discord-webhook">Webhook URL</label>
+        <input type="text" class="form-input" id="discord-webhook" placeholder="https://discord.com/api/webhooks/...">
+      </div>
+      <div class="flex items-center gap-3 mt-4">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-save-discord">Save</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-test-discord">Test</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slack -->
+  <div class="alert-channel-card" id="card-slack" data-channel="slack">
+    <div class="alert-channel-header">
+      <div class="alert-channel-name">
+        <div class="alert-channel-icon">&#128241;</div>
+        <span>Slack</span>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle-slack" data-channel="slack">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="alert-channel-desc">
+      Push alerts to a Slack channel via webhook.
+    </div>
+    <div class="alert-channel-footer">
+      <div class="flex items-center gap-2">
+        <span class="status-dot" id="status-dot-slack"></span>
+        <span class="text-muted" id="status-text-slack">Not configured</span>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-config-slack">Configure</button>
+    </div>
+    <div class="setup-form" id="setup-slack" style="display:none;">
+      <div class="divider"></div>
+      <div class="form-group">
+        <label class="form-label" for="slack-webhook">Webhook URL</label>
+        <input type="text" class="form-input" id="slack-webhook" placeholder="https://hooks.slack.com/services/...">
+      </div>
+      <div class="flex items-center gap-3 mt-4">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-save-slack">Save</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-test-slack">Test</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Telegram -->
+  <div class="alert-channel-card" id="card-telegram" data-channel="telegram">
+    <div class="alert-channel-header">
+      <div class="alert-channel-name">
+        <div class="alert-channel-icon">&#9992;</div>
+        <span>Telegram</span>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggle-telegram" data-channel="telegram">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="alert-channel-desc">
+      Send alerts via Telegram bot messages.
+    </div>
+    <div class="alert-channel-footer">
+      <div class="flex items-center gap-2">
+        <span class="status-dot" id="status-dot-telegram"></span>
+        <span class="text-muted" id="status-text-telegram">Not configured</span>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-config-telegram">Configure</button>
+    </div>
+    <div class="setup-form" id="setup-telegram" style="display:none;">
+      <div class="divider"></div>
+      <div class="settings-grid two-col">
+        <div class="form-group">
+          <label class="form-label" for="telegram-bot-token">Bot Token</label>
+          <input type="text" class="form-input" id="telegram-bot-token" placeholder="123456:ABC-DEF...">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="telegram-chat-id">Chat ID</label>
+          <input type="text" class="form-input" id="telegram-chat-id" placeholder="-1001234567890">
+        </div>
+      </div>
+      <div class="flex items-center gap-3 mt-4">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-save-telegram">Save</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-test-telegram">Test</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Filter Settings -->
+<div class="card mt-4" id="filter-settings-card">
+  <div class="card-header">
+    <h3>Event Filters</h3>
+    <span class="badge badge-info">Global</span>
+  </div>
+  <div class="card-body">
+    <div class="settings-grid two-col">
+      <div class="form-group">
+        <label class="form-label" for="filter-min-transfer">Min Transfer Value (ETH)</label>
+        <input type="number" class="form-input" id="filter-min-transfer" step="0.001" min="0" placeholder="0.0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Watch Options</label>
+        <div class="flex items-center gap-4 mt-2">
+          <label class="toggle-switch">
+            <input type="checkbox" id="filter-watch-admin">
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">Admin Events</span>
+          </label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="filter-watch-large">
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">Large Transfers</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card-footer">
+    <button type="button" class="btn btn-primary btn-sm" id="btn-save-filters">Save Filters</button>
+  </div>
+</div>
+
+<!-- Test All Alerts -->
+<div class="card mt-4" id="test-all-card">
+  <div class="card-header">
+    <h3>Test All Alerts</h3>
+  </div>
+  <div class="card-body">
+    <p class="text-muted" style="margin-bottom: var(--space-4);">
+      Send a test alert through every enabled channel to verify your configuration.
+    </p>
+    <button type="button" class="btn btn-secondary" id="btn-test-all">
+      <span id="test-all-text">Test All Alerts</span>
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+
+  const { api, showToast } = window.ScarpShield;
+
+  // ── State ────────────────────────────────────────────────────
+  let alertsData = {};
+  let configData = {};
+
+  // ── Helpers ──────────────────────────────────────────────────
+  function isConfigured(channel, settings) {
+    if (channel === 'console') return true;
+    if (channel === 'email') {
+      return !!(settings.smtp_host);
+    }
+    if (channel === 'discord' || channel === 'slack') {
+      return !!(settings.webhook_url);
+    }
+    if (channel === 'telegram') {
+      return !!(settings.bot_token && settings.chat_id);
+    }
+    return false;
+  }
+
+  function updateStatusDot(channel, enabled, configured) {
+    const dot = document.getElementById('status-dot-' + channel);
+    const text = document.getElementById('status-text-' + channel);
+    if (!dot || !text) return;
+
+    if (!enabled) {
+      dot.className = 'status-dot status-dot-inactive';
+      text.textContent = 'Disabled';
+      text.className = 'text-dim';
+    } else if (configured) {
+      dot.className = 'status-dot status-dot-active';
+      text.textContent = 'Active';
+      text.className = 'text-success';
+    } else {
+      dot.className = 'status-dot status-dot-warning';
+      text.textContent = 'Not configured';
+      text.className = 'text-warning';
+    }
+  }
+
+  function updateCardEnabled(channel, enabled) {
+    const card = document.getElementById('card-' + channel);
+    if (card) {
+      card.classList.toggle('enabled', enabled);
+    }
+  }
+
+  function setButtonLoading(btn, loading) {
+    if (loading) {
+      btn.disabled = true;
+      btn.dataset.originalText = btn.textContent.trim();
+      btn.textContent = 'Loading…';
+    } else {
+      btn.disabled = false;
+      if (btn.dataset.originalText) {
+        btn.textContent = btn.dataset.originalText;
+      }
+    }
+  }
+
+  // ── Populate UI from data ────────────────────────────────────
+  function populateAlerts(data) {
+    alertsData = data;
+    for (const [channel, info] of Object.entries(data)) {
+      const enabled = info.enabled === true;
+      const settings = info.settings || {};
+      const configured = isConfigured(channel, settings);
+
+      // Toggle
+      const toggle = document.getElementById('toggle-' + channel);
+      if (toggle) toggle.checked = enabled;
+
+      // Card state
+      updateCardEnabled(channel, enabled);
+
+      // Status dot
+      updateStatusDot(channel, enabled, configured);
+
+      // Populate forms
+      if (channel === 'email') {
+        document.getElementById('email-smtp-host').value = settings.smtp_host || '';
+        document.getElementById('email-smtp-port').value = settings.smtp_port || '';
+        document.getElementById('email-smtp-user').value = settings.smtp_user || '';
+        document.getElementById('email-smtp-password').value = settings.smtp_password || '';
+        document.getElementById('email-from').value = settings.from_address || '';
+        const toAddr = Array.isArray(settings.to_addresses) ? settings.to_addresses.join(', ') : (settings.to_addresses || '');
+        document.getElementById('email-to').value = toAddr;
+      }
+      if (channel === 'discord') {
+        document.getElementById('discord-webhook').value = settings.webhook_url || '';
+      }
+      if (channel === 'slack') {
+        document.getElementById('slack-webhook').value = settings.webhook_url || '';
+      }
+      if (channel === 'telegram') {
+        document.getElementById('telegram-bot-token').value = settings.bot_token || '';
+        document.getElementById('telegram-chat-id').value = settings.chat_id || '';
+      }
+    }
+  }
+
+  function populateFilters(config) {
+    configData = config;
+    const filters = config.filters || {};
+    const minTransfer = document.getElementById('filter-min-transfer');
+    const watchAdmin = document.getElementById('filter-watch-admin');
+    const watchLarge = document.getElementById('filter-watch-large');
+
+    if (minTransfer) minTransfer.value = filters.min_transfer_value_eth ?? 0;
+    if (watchAdmin) watchAdmin.checked = filters.watch_admin_events !== false;
+    if (watchLarge) watchLarge.checked = filters.watch_large_transfers !== false;
+  }
+
+  // ── Toggle handlers ──────────────────────────────────────────
+  async function handleToggle(channel, enabled) {
+    try {
+      const endpoint = enabled ? `/api/alerts/${channel}/enable` : `/api/alerts/${channel}/disable`;
+      await api('POST', endpoint);
+
+      // Optimistically update local state
+      if (alertsData[channel]) alertsData[channel].enabled = enabled;
+      const settings = alertsData[channel]?.settings || {};
+      const configured = isConfigured(channel, settings);
+      updateCardEnabled(channel, enabled);
+      updateStatusDot(channel, enabled, configured);
+
+      showToast(`${channel.charAt(0).toUpperCase() + channel.slice(1)} ${enabled ? 'enabled' : 'disabled'}`, 'success');
+    } catch (err) {
+      showToast(err.data?.error || `Failed to ${enabled ? 'enable' : 'disable'} ${channel}`, 'error');
+      // Revert toggle
+      const toggle = document.getElementById('toggle-' + channel);
+      if (toggle) toggle.checked = !enabled;
+    }
+  }
+
+  // ── Setup form handlers ──────────────────────────────────────
+  async function handleSave(channel) {
+    const btn = document.getElementById('btn-save-' + channel);
+    setButtonLoading(btn, true);
+
+    let payload = {};
+    if (channel === 'email') {
+      const toRaw = document.getElementById('email-to').value.trim();
+      payload = {
+        smtp_host: document.getElementById('email-smtp-host').value.trim(),
+        smtp_port: parseInt(document.getElementById('email-smtp-port').value, 10) || 587,
+        smtp_user: document.getElementById('email-smtp-user').value.trim(),
+        smtp_password: document.getElementById('email-smtp-password').value,
+        from_address: document.getElementById('email-from').value.trim(),
+        to_addresses: toRaw ? toRaw.split(',').map(s => s.trim()).filter(Boolean) : []
+      };
+    } else if (channel === 'discord') {
+      payload = { webhook_url: document.getElementById('discord-webhook').value.trim() };
+    } else if (channel === 'slack') {
+      payload = { webhook_url: document.getElementById('slack-webhook').value.trim() };
+    } else if (channel === 'telegram') {
+      payload = {
+        bot_token: document.getElementById('telegram-bot-token').value.trim(),
+        chat_id: document.getElementById('telegram-chat-id').value.trim()
+      };
+    }
+
+    try {
+      await api('POST', `/api/setup/${channel}`, payload);
+
+      // Update local state
+      if (!alertsData[channel]) alertsData[channel] = { enabled: false, settings: {} };
+      alertsData[channel].settings = { ...alertsData[channel].settings, ...payload };
+      alertsData[channel].enabled = true;
+
+      // Update UI
+      const toggle = document.getElementById('toggle-' + channel);
+      if (toggle) toggle.checked = true;
+      updateCardEnabled(channel, true);
+      updateStatusDot(channel, true, isConfigured(channel, alertsData[channel].settings));
+
+      showToast(`${channel.charAt(0).toUpperCase() + channel.slice(1)} configured`, 'success');
+    } catch (err) {
+      showToast(err.data?.error || `Failed to save ${channel} settings`, 'error');
+    } finally {
+      setButtonLoading(btn, false);
+    }
+  }
+
+  async function handleTest(channel) {
+    const btnIds = channel === 'all' ? ['btn-test-all', 'btn-test-all-header'] : ['btn-test-' + channel];
+    const btns = btnIds.map(id => document.getElementById(id)).filter(Boolean);
+    btns.forEach(btn => setButtonLoading(btn, true));
+
+    try {
+      if (channel === 'all') {
+        await api('POST', '/api/alerts/test');
+        showToast('Test alerts dispatched to all enabled channels', 'success');
+      } else {
+        // Individual channel test: enable temporarily, test, then restore state
+        const wasEnabled = alertsData[channel]?.enabled === true;
+        if (!wasEnabled) {
+          await api('POST', `/api/alerts/${channel}/enable`);
+        }
+        await api('POST', '/api/alerts/test');
+        if (!wasEnabled) {
+          await api('POST', `/api/alerts/${channel}/disable`);
+        }
+        showToast(`Test alert sent via ${channel}`, 'success');
+      }
+    } catch (err) {
+      showToast(err.data?.error || `Test failed: ${err.message}`, 'error');
+    } finally {
+      btns.forEach(btn => setButtonLoading(btn, false));
+    }
+  }
+
+  // ── Filter handlers ──────────────────────────────────────────
+  async function handleSaveFilters() {
+    const btn = document.getElementById('btn-save-filters');
+    setButtonLoading(btn, true);
+
+    const payload = {
+      filters: {
+        min_transfer_value_eth: parseFloat(document.getElementById('filter-min-transfer').value) || 0,
+        watch_admin_events: document.getElementById('filter-watch-admin').checked,
+        watch_large_transfers: document.getElementById('filter-watch-large').checked
+      }
+    };
+
+    try {
+      await api('POST', '/api/config', payload);
+      showToast('Filters saved', 'success');
+    } catch (err) {
+      showToast(err.data?.error || 'Failed to save filters', 'error');
+    } finally {
+      setButtonLoading(btn, false);
+    }
+  }
+
+  // ── Setup form expand/collapse ───────────────────────────────
+  function toggleSetup(channel) {
+    const form = document.getElementById('setup-' + channel);
+    const btn = document.getElementById('btn-config-' + channel);
+    if (!form || !btn) return;
+
+    const isHidden = form.style.display === 'none';
+    form.style.display = isHidden ? 'block' : 'none';
+    btn.textContent = isHidden ? 'Hide' : 'Configure';
+  }
+
+  // ── Wire events ──────────────────────────────────────────────
+  function wireEvents() {
+    // Toggles
+    ['console', 'email', 'discord', 'slack', 'telegram'].forEach(channel => {
+      const toggle = document.getElementById('toggle-' + channel);
+      if (toggle) {
+        toggle.addEventListener('change', (e) => {
+          handleToggle(channel, e.target.checked);
+        });
+      }
+    });
+
+    // Config buttons (expand/collapse)
+    ['email', 'discord', 'slack', 'telegram'].forEach(channel => {
+      const btn = document.getElementById('btn-config-' + channel);
+      if (btn) {
+        btn.addEventListener('click', () => toggleSetup(channel));
+      }
+    });
+
+    // Save buttons
+    ['email', 'discord', 'slack', 'telegram'].forEach(channel => {
+      const btn = document.getElementById('btn-save-' + channel);
+      if (btn) {
+        btn.addEventListener('click', () => handleSave(channel));
+      }
+    });
+
+    // Test buttons
+    ['email', 'discord', 'slack', 'telegram'].forEach(channel => {
+      const btn = document.getElementById('btn-test-' + channel);
+      if (btn) {
+        btn.addEventListener('click', () => handleTest(channel));
+      }
+    });
+
+    // Test all buttons
+    ['btn-test-all', 'btn-test-all-header'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.addEventListener('click', () => handleTest('all'));
+      }
+    });
+
+    // Save filters
+    const saveFiltersBtn = document.getElementById('btn-save-filters');
+    if (saveFiltersBtn) {
+      saveFiltersBtn.addEventListener('click', handleSaveFilters);
+    }
+  }
+
+  // ── Initialization ───────────────────────────────────────────
+  async function init() {
+    wireEvents();
+
+    try {
+      const [alerts, config] = await Promise.all([
+        api('GET', '/api/alerts'),
+        api('GET', '/api/config')
+      ]);
+      populateAlerts(alerts);
+      populateFilters(config);
+    } catch (err) {
+      showToast('Failed to load alert configuration', 'error');
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+{% endblock %}
