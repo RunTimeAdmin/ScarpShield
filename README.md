@@ -113,3 +113,11 @@ ScarpShield is under active development. Planned features:
 - [ ] **CounterScarp.io Integration** — Direct integration with CounterScarp scanning results for pre+post deployment coverage
 
 Have a feature request? [Open an issue](https://github.com/RunTimeAdmin/ScarpShield/issues).
+
+## Security
+
+To report a vulnerability, please see our [Security Policy](SECURITY.md). Do not open public issues for security concerns.
+
+## Support
+
+If ScarpShield helps protect your contracts, consider [sponsoring the project](https://github.com/sponsors/RunTimeAdmin) to support continued development.

@@ -22,6 +22,105 @@
   }
 }
 
+/* ── CounterScarp CTA Banner ──────────────────────────────── */
+.cta-banner {
+  border-left: 3px solid var(--accent-secondary);
+  background: linear-gradient(90deg, rgba(255, 204, 0, 0.06) 0%, var(--bg-surface) 100%);
+}
+
+.cta-banner-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.cta-banner-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.cta-banner-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cta-banner-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--accent-secondary-dim);
+  color: var(--accent-secondary);
+  font-size: 1.125rem;
+  flex-shrink: 0;
+}
+
+.cta-banner-desc {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.cta-banner-tagline {
+  color: var(--accent-secondary);
+  font-weight: 500;
+}
+
+.cta-banner-actions {
+  flex-shrink: 0;
+}
+
+.cta-banner-dismiss {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: var(--space-1);
+  transition: color var(--transition-base);
+}
+
+.cta-banner-dismiss:hover {
+  color: var(--text-primary);
+}
+
+.cta-banner {
+  position: relative;
+}
+
+@media (max-width: 767px) {
+  .cta-banner-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-4);
+  }
+
+  .cta-banner-actions {
+    width: 100%;
+  }
+
+  .cta-banner-actions .btn {
+    width: 100%;
+  }
+}
+
 /* ── Dashboard Sections ─────────────────────────────────────── */
 .dashboard-section {
   margin-bottom: var(--space-6);

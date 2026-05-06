@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0F141A">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="ScarpShield — Smart contract monitoring by CounterScarp.io">
+
+  <title>Login — ScarpShield</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+
+  <style>
+    .login-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-6);
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-xl);
+      padding: var(--space-10) var(--space-8);
+      box-shadow: var(--shadow-lg);
+      animation: fadeIn 0.4s ease forwards;
+    }
+
+    .login-brand {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin-bottom: var(--space-8);
+    }
+
+    .login-brand img {
+      width: 48px;
+      height: 48px;
+      margin-bottom: var(--space-4);
+    }
+
+    .login-brand h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: var(--space-1);
+    }
+
+    .login-brand .tagline {
+      font-size: 0.6875rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-dim);
+    }
+
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-5);
+    }
+
+    .login-form .form-group {
+      margin-bottom: 0;
+    }
+
+    .login-form .btn {
+      width: 100%;
+    }
+
+    .login-error {
+      padding: var(--space-3) var(--space-4);
+      background: var(--accent-danger-dim);
+      border: 1px solid rgba(255, 107, 53, 0.25);
+      border-radius: var(--radius-md);
+      color: var(--accent-danger);
+      font-size: 0.875rem;
+      text-align: center;
+    }
+
+    .login-footer {
+      margin-top: var(--space-8);
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-page">
+    <div class="login-card">
+      <div class="login-brand">
+        <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="ScarpShield">
+        <h1>ScarpShield</h1>
+        <span class="tagline">The Outer Wall of Defense</span>
+      </div>
+
+      <form class="login-form" action="/login" method="POST">
+        {% if error %}
+        <div class="login-error">{{ error }}</div>
+        {% endif %}
+
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            class="form-input"
+            placeholder="Enter dashboard password"
+            required
+            autofocus
+          >
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg">
+          Access Dashboard
+        </button>
+      </form>
+
+      <div class="login-footer">
+        <span>Powered by CounterScarp.io</span>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

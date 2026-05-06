@@ -8,7 +8,13 @@ from pathlib import Path
 from web3 import Web3
 
 from .config import load_config, get_rpc_url
-from .alerts.base import format_alert
+from .alerts.base import (
+    format_alert,
+    classify_severity,
+    SEVERITY_INFO,
+    SEVERITY_WARNING,
+    SEVERITY_CRITICAL,
+)
 from .alerts.dispatcher import AlertDispatcher
 
 # Standard ERC-20 event signatures
@@ -49,32 +55,39 @@ ERC20_DECIMALS_ABI = [
     }
 ]
 
-STATE_FILE = Path(".scarpshield_state.json")
+# Resolve state file relative to project root (same as config.py)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+STATE_FILE = PROJECT_ROOT / ".scarpshield_state.json"
 
 _token_decimals = {}
 
 
-def run_monitor():
+def run_monitor(stop_event=None, dispatcher_class=None, on_event=None):
     """Main monitoring loop."""
     config = load_config()
     contracts = config.get("contracts", [])
 
     if not contracts:
-        print("[!] No contracts to monitor.")
-        print("    Use: scarpshield add <address>")
+        if not stop_event:
+            print("[!] No contracts to monitor.")
+            print("    Use: scarpshield add <address>")
         return
 
-    dispatcher = AlertDispatcher(config)
+    if dispatcher_class is not None:
+        dispatcher = dispatcher_class(config)
+    else:
+        dispatcher = AlertDispatcher(config)
     enabled = dispatcher.list_enabled()
     interval = config.get("poll_interval_seconds", 15)
 
-    print("=" * 50)
-    print("  ScarpShield v0.1 - CounterScarp.io")
-    print("=" * 50)
-    print(f"  Monitoring {len(contracts)} contract(s)")
-    print(f"  Alert channels: {', '.join(enabled)}")
-    print(f"  Poll interval:  {interval}s")
-    print("=" * 50)
+    if not stop_event:
+        print("=" * 50)
+        print("  ScarpShield v0.1 - CounterScarp.io")
+        print("=" * 50)
+        print(f"  Monitoring {len(contracts)} contract(s)")
+        print(f"  Alert channels: {', '.join(enabled)}")
+        print(f"  Poll interval:  {interval}s")
+        print("=" * 50)
 
     # Build Web3 connections per chain
     chains = {}
@@ -84,10 +97,12 @@ def run_monitor():
             rpc = get_rpc_url(config, chain)
             w3 = Web3(Web3.HTTPProvider(rpc))
             if w3.is_connected():
-                print(f"  [{chain}] Connected")
+                if not stop_event:
+                    print(f"  [{chain}] Connected")
                 chains[chain] = w3
             else:
-                print(f"  [!] {chain}: Cannot connect")
+                if not stop_event:
+                    print(f"  [!] {chain}: Cannot connect")
 
     # Track last-seen block per chain
     state = load_state()
@@ -102,18 +117,41 @@ def run_monitor():
     failures = {}
     last_failure_time = {}
 
-    print("\nMonitoring started. Press Ctrl+C to stop.\n")
+    if not stop_event:
+        print("\nMonitoring started. Press Ctrl+C to stop.\n")
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
     try:
-        while True:
+        while not (stop_event and stop_event.is_set()):
+            # Reload config each iteration so new contracts / chains are picked up
+            config = load_config()
+            contracts = config.get("contracts", [])
+            interval = config.get("poll_interval_seconds", 15)
+
             for entry in contracts:
+                if stop_event and stop_event.is_set():
+                    break
+
                 addr = entry["address"]
                 chain = entry.get("chain", "ethereum")
                 label = entry.get("label", addr[:10])
                 events = entry.get("events", [])
+
+                # Lazy-connect to newly added chains
+                if chain not in chains:
+                    rpc = get_rpc_url(config, chain)
+                    w3 = Web3(Web3.HTTPProvider(rpc))
+                    if w3.is_connected():
+                        chains[chain] = w3
+                        try:
+                            if chain not in last_block:
+                                last_block[chain] = w3.eth.block_number
+                        except Exception:
+                            last_block[chain] = 0
+                    else:
+                        continue
 
                 w3 = chains.get(chain)
                 if not w3:
@@ -135,10 +173,11 @@ def run_monitor():
                     # Backfill cap
                     if current - prev > MAX_BLOCK_RANGE:
                         skipped = current - prev - MAX_BLOCK_RANGE
-                        print(
-                            f"[!] {chain}: Skipping {skipped} "
-                            f"blocks (backfill cap)"
-                        )
+                        if not stop_event:
+                            print(
+                                f"[!] {chain}: Skipping {skipped} "
+                                f"blocks (backfill cap)"
+                            )
                         prev = current - MAX_BLOCK_RANGE
                         last_block[chain] = prev
 
@@ -146,7 +185,7 @@ def run_monitor():
                     _check_events(
                         w3, addr, label, chain,
                         prev, current, events,
-                        dispatcher, config, loop
+                        dispatcher, config, loop, on_event
                     )
 
                     # Check pending txns for admin calls
@@ -156,25 +195,35 @@ def run_monitor():
                         _check_admin_calls(
                             w3, addr, label, chain,
                             prev, current,
-                            dispatcher, loop
+                            dispatcher, loop, on_event
                         )
 
                     last_block[chain] = current
                     failures[chain] = 0
 
                 except Exception as e:
-                    print(
-                        f"[!] Error checking {label} "
-                        f"on {chain}: {e}"
-                    )
+                    if not stop_event:
+                        print(
+                            f"[!] Error checking {label} "
+                            f"on {chain}: {e}"
+                        )
                     failures[chain] = min(failures.get(chain, 0) + 1, 5)
                     last_failure_time[chain] = time.time()
 
             save_state({"last_block": last_block})
-            time.sleep(interval)
+            if stop_event:
+                stop_event.wait(interval)
+            else:
+                time.sleep(interval)
 
     except KeyboardInterrupt:
-        print("\nScarpShield stopped.")
+        if not stop_event:
+            print("\nScarpShield stopped.")
+    except Exception as e:
+        if stop_event:
+            print(f"[!] Monitor loop crashed: {e}")
+        else:
+            raise
     finally:
         loop.close()
 
@@ -182,7 +231,7 @@ def run_monitor():
 def _check_events(
     w3, address, label, chain,
     from_block, to_block, watch_events,
-    dispatcher, config, loop
+    dispatcher, config, loop, on_event=None
 ):
     """Check for watched events on a contract."""
     filters_cfg = config.get("filters", {})
@@ -215,15 +264,36 @@ def _check_events(
             if details is None:
                 continue
 
+            severity = SEVERITY_INFO
+            if event_name == "Transfer":
+                raw = int(log["data"].hex(), 16) if log["data"] else 0
+                value = raw / (10 ** decimals)
+                high_threshold = min_val * 10 if min_val > 0 else 0
+                if high_threshold > 0 and value >= high_threshold:
+                    severity = SEVERITY_WARNING
+            elif event_name == "Approval":
+                severity = SEVERITY_WARNING
+            elif event_name == "OwnershipTransferred":
+                severity = SEVERITY_CRITICAL
+
             alert_msg = format_alert(
                 event_type=event_name,
                 contract=f"{label} ({address})",
                 details=details,
-                chain=chain
+                chain=chain,
+                severity=severity
             )
+            metadata = {
+                "event_type": event_name,
+                "contract": label,
+                "chain": chain,
+                "severity": severity,
+            }
             loop.run_until_complete(
-                dispatcher.dispatch(alert_msg)
+                dispatcher.dispatch(alert_msg, metadata)
             )
+            if on_event:
+                on_event(alert_msg)
 
 
 def _parse_log(w3, event_name, log, min_val, decimals=18):
@@ -275,7 +345,7 @@ def _parse_log(w3, event_name, log, min_val, decimals=18):
 def _check_admin_calls(
     w3, address, label, chain,
     from_block, to_block,
-    dispatcher, loop
+    dispatcher, loop, on_event=None
 ):
     """Check blocks for admin function calls."""
     addr_lower = address.lower()
@@ -292,19 +362,29 @@ def _check_admin_calls(
                 sel = inp[:10] if len(inp) >= 10 else ""
                 for fname, fsig in ADMIN_SIGS.items():
                     if sel == fsig:
+                        event_type = f"ADMIN: {fname}()"
                         msg = format_alert(
-                            event_type=f"ADMIN: {fname}()",
+                            event_type=event_type,
                             contract=f"{label} ({address})",
                             details=(
                                 f"Caller: {tx.get('from')}\n"
                                 f"          Tx: "
                                 f"{tx['hash'].hex()}"
                             ),
-                            chain=chain
+                            chain=chain,
+                            severity=SEVERITY_CRITICAL
                         )
+                        metadata = {
+                            "event_type": event_type,
+                            "contract": label,
+                            "chain": chain,
+                            "severity": SEVERITY_CRITICAL,
+                        }
                         loop.run_until_complete(
-                            dispatcher.dispatch(msg)
+                            dispatcher.dispatch(msg, metadata)
                         )
+                        if on_event:
+                            on_event(msg)
     except Exception as e:
         print(f"[!] Admin check error on {label}: {e}")
 

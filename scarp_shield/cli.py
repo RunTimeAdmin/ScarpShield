@@ -1,6 +1,7 @@
 # ScarpShield - Official monitoring tool for CounterScarp.io
 # https://counterscarp.io
 
+import threading
 import webbrowser
 
 import typer
@@ -286,11 +287,19 @@ def gui(
     no_browser: bool = typer.Option(
         False, "--no-browser", help="Do not open browser automatically"
     ),
+    password: str = typer.Option(
+        None, "--password", "-P", help="Set dashboard password (enables authentication)"
+    ),
 ):
     """Launch the ScarpShield web dashboard."""
     from .gui import create_app
 
-    app_flask = create_app()
+    if password is None and host == "0.0.0.0":
+        typer.echo(
+            "WARNING: Dashboard exposed without authentication. Use --password to protect."
+        )
+
+    app_flask = create_app(password=password)
     url = f"http://{host}:{port}"
 
     banner = f"""╔══════════════════════════════════════════╗
@@ -303,7 +312,7 @@ def gui(
     typer.echo(banner)
 
     if not no_browser:
-        webbrowser.open(url)
+        threading.Timer(1.5, webbrowser.open, args=[url]).start()
 
     app_flask.run(host=host, port=port, debug=False)
 

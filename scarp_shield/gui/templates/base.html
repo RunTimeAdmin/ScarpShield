@@ -37,6 +37,9 @@
       <a href="https://counterscarp.io" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">
         counterscarp.io &#8599;
       </a>
+      {% if session.get('authenticated') %}
+      <a href="/logout" class="btn btn-ghost btn-sm">Logout</a>
+      {% endif %}
     </div>
   </header>
 

@@ -5,17 +5,40 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 
 
-def format_alert(event_type, contract, details, chain="ethereum"):
+# Severity levels
+SEVERITY_INFO = "INFO"
+SEVERITY_WARNING = "WARNING"
+SEVERITY_CRITICAL = "CRITICAL"
+
+
+def classify_severity(event_type, details=""):
+    """Classify alert severity based on event type."""
+    critical_events = {"OwnershipTransferred", "upgradeTo", "upgradeToAndCall",
+                       "renounceOwnership", "transferOwnership", "AdminCall"}
+    warning_events = {"Approval", "LargeTransfer"}
+
+    if event_type in critical_events:
+        return SEVERITY_CRITICAL
+    elif event_type in warning_events:
+        return SEVERITY_WARNING
+    else:
+        return SEVERITY_INFO
+
+
+def format_alert(event_type, contract, details, chain="ethereum", severity=None):
     """Format a standard alert message."""
+    if severity is None:
+        severity = classify_severity(event_type)
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     return (
-        f"--- ScarpShield Alert ---\n"
+        f"--- ScarpShield Alert [{severity}] ---\n"
         f"Time:     {ts}\n"
+        f"Severity: {severity}\n"
         f"Chain:    {chain}\n"
         f"Contract: {contract}\n"
         f"Event:    {event_type}\n"
         f"Details:  {details}\n"
-        f"-------------------------"
+        f"{'=' * 33}"
     )
 
 
@@ -32,7 +55,7 @@ class AlertBackend(ABC):
 
     def format_alert(
         self, event_type: str, contract: str,
-        details: str, chain: str = "ethereum"
+        details: str, chain: str = "ethereum", severity: str = None
     ) -> str:
         """Format a standard alert message."""
-        return format_alert(event_type, contract, details, chain)
+        return format_alert(event_type, contract, details, chain, severity)

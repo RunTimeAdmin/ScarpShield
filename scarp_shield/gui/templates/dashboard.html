@@ -52,6 +52,32 @@
   </div>
 </div>
 
+<!-- CounterScarp Integration CTA -->
+<div class="dashboard-section" id="cta-banner-section">
+  <div class="card cta-banner">
+    <div class="cta-banner-inner">
+      <div class="cta-banner-content">
+        <div class="cta-banner-title">
+          <span class="cta-banner-icon">&#9960;</span>
+          <span>Complete Your Security Lifecycle</span>
+        </div>
+        <p class="cta-banner-desc">
+          Import your CounterScarp.io audit results to auto-generate monitoring rules.
+          <span class="cta-banner-tagline">Scan before you ship, monitor after you ship.</span>
+        </p>
+      </div>
+      <div class="cta-banner-actions">
+        <a href="https://counterscarp.io" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+          Connect to CounterScarp &rarr;
+        </a>
+      </div>
+      <button type="button" class="cta-banner-dismiss" id="cta-dismiss-btn" title="Dismiss">
+        &times;
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Monitor Controls -->
 <div class="dashboard-section">
   <div class="card">
@@ -436,12 +462,32 @@
     loadStatus();
     loadContracts();
     setupSSE();
+    setupCTABanner();
 
     document.getElementById('monitor-toggle-btn').addEventListener('click', toggleMonitor);
     document.getElementById('btn-test-alerts').addEventListener('click', testAlerts);
 
     // Refresh stats every 10 seconds
     setInterval(loadStatus, 10000);
+  }
+
+  /* ── CTA Banner ───────────────────────────────────────────── */
+
+  function setupCTABanner() {
+    const bannerSection = document.getElementById('cta-banner-section');
+    const dismissBtn = document.getElementById('cta-dismiss-btn');
+    if (!bannerSection || !dismissBtn) return;
+
+    // Hide if previously dismissed
+    if (localStorage.getItem('ctaBannerDismissed') === '1') {
+      bannerSection.style.display = 'none';
+      return;
+    }
+
+    dismissBtn.addEventListener('click', () => {
+      bannerSection.style.display = 'none';
+      localStorage.setItem('ctaBannerDismissed', '1');
+    });
   }
 
   if (document.readyState === 'loading') {

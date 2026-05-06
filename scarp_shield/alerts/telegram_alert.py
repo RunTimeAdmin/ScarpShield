@@ -44,6 +44,6 @@ class TelegramAlert(AlertBackend):
         )
 
         try:
-            urllib.request.urlopen(req)
+            urllib.request.urlopen(req, timeout=10)
         except urllib.error.URLError as e:
             print(f"[!] Telegram alert failed: {e}")

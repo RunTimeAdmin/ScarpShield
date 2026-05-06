@@ -2,14 +2,16 @@
 # https://counterscarp.io
 
 import asyncio
+import hashlib
 import json
+import os
 import queue
 import threading
 import time
 from collections import deque
 from datetime import datetime, timezone
 
-from flask import Flask, jsonify, render_template, request, Response
+from flask import Flask, jsonify, render_template, request, Response, redirect, session, url_for
 
 from ..config import (
     DEFAULT_CONFIG,
@@ -36,11 +38,10 @@ event_logs = deque(maxlen=1000)
 # ── Alert interception ───────────────────────────
 
 class GUIAlertDispatcher(AlertDispatcher):
-    """Dispatcher that also pushes alerts to GUI SSE queues and log buffer."""
+    """GUI-specific dispatcher subclass."""
 
     async def dispatch(self, message: str, metadata=None):
         await super().dispatch(message, metadata)
-        _push_alert_event(message, metadata)
 
 
 def _push_alert_event(message: str, metadata=None):
@@ -70,132 +71,51 @@ def _push_alert_event(message: str, metadata=None):
 
 def run_monitor_background(stop_evt: threading.Event):
     """Stoppable monitor loop that feeds the GUI event stream."""
-    config = load_config()
-    contracts = config.get("contracts", [])
+    from ..monitor import run_monitor
 
-    if not contracts:
-        return
+    def on_event(message):
+        _push_alert_event(message)
 
-    from web3 import Web3
-
-    from ..monitor import (
-        _check_admin_calls,
-        _check_events,
-        MAX_BLOCK_RANGE,
-        load_state,
-        save_state,
+    run_monitor(
+        stop_event=stop_evt,
+        dispatcher_class=GUIAlertDispatcher,
+        on_event=on_event,
     )
 
-    dispatcher = GUIAlertDispatcher(config)
-    interval = config.get("poll_interval_seconds", 15)
 
-    # Build / cache Web3 connections per chain
-    chains = {}
-    last_block = {}
+# ── Authentication ───────────────────────────────
 
-    def _ensure_chain(chain: str):
-        if chain in chains:
-            return
-        rpc = get_rpc_url(config, chain)
-        w3 = Web3(Web3.HTTPProvider(rpc))
-        if w3.is_connected():
-            chains[chain] = w3
-            try:
-                last_block[chain] = w3.eth.block_number
-            except Exception:
-                last_block[chain] = 0
+def setup_auth(app: Flask, password: str):
+    """Configure session-based authentication for the Flask app."""
+    app.secret_key = os.urandom(24).hex()
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
 
-    for c in contracts:
-        _ensure_chain(c.get("chain", "ethereum"))
+    @app.before_request
+    def require_auth():
+        if request.endpoint in ("login", "static"):
+            return None
+        if not session.get("authenticated"):
+            return redirect(url_for("login"))
 
-    # Load persisted state
-    state = load_state()
-    persisted = state.get("last_block", {})
-    for chain, block in persisted.items():
-        if chain in chains:
-            last_block[chain] = block
+    @app.route("/login", methods=["GET"])
+    def login():
+        if session.get("authenticated"):
+            return redirect(url_for("dashboard"))
+        return render_template("login.html")
 
-    failures = {}
-    last_failure_time = {}
+    @app.route("/login", methods=["POST"])
+    def login_post():
+        submitted = request.form.get("password", "")
+        submitted_hash = hashlib.sha256(submitted.encode()).hexdigest()
+        if submitted_hash == password_hash:
+            session["authenticated"] = True
+            return redirect(url_for("dashboard"))
+        return render_template("login.html", error="Invalid password."), 401
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        while not stop_evt.is_set():
-            # Reload config each iteration so new contracts /
-            # chains are picked up
-            config = load_config()
-            contracts = config.get("contracts", [])
-            interval = config.get("poll_interval_seconds", 15)
-
-            for entry in contracts:
-                if stop_evt.is_set():
-                    break
-
-                addr = entry["address"]
-                chain = entry.get("chain", "ethereum")
-                label = entry.get("label", addr[:10])
-                events = entry.get("events", [])
-
-                _ensure_chain(chain)
-                w3 = chains.get(chain)
-                if not w3:
-                    continue
-
-                # Check backoff for this chain
-                if failures.get(chain, 0) > 0:
-                    backoff = min(interval * (2 ** failures[chain]), 300)
-                    if time.time() - last_failure_time.get(chain, 0) < backoff:
-                        continue
-
-                try:
-                    current = w3.eth.block_number
-                    prev = last_block.get(chain, current)
-
-                    if current <= prev:
-                        continue
-
-                    # Backfill cap
-                    if current - prev > MAX_BLOCK_RANGE:
-                        skipped = current - prev - MAX_BLOCK_RANGE
-                        print(
-                            f"[!] {chain}: Skipping {skipped} "
-                            f"blocks (backfill cap)"
-                        )
-                        prev = current - MAX_BLOCK_RANGE
-                        last_block[chain] = prev
-
-                    _check_events(
-                        w3, addr, label, chain,
-                        prev, current, events,
-                        dispatcher, config, loop
-                    )
-
-                    watch_admin = config.get("filters", {}).get(
-                        "watch_admin_events", True
-                    )
-                    if watch_admin:
-                        _check_admin_calls(
-                            w3, addr, label, chain,
-                            prev, current,
-                            dispatcher, loop
-                        )
-
-                    last_block[chain] = current
-                    failures[chain] = 0
-                except Exception as e:
-                    print(f"[!] Error checking {label} on {chain}: {e}")
-                    failures[chain] = min(
-                        failures.get(chain, 0) + 1, 5
-                    )
-                    last_failure_time[chain] = time.time()
-
-            save_state({"last_block": last_block})
-            stop_evt.wait(interval)
-    except Exception as e:
-        print(f"[!] Monitor loop crashed: {e}")
-    finally:
-        loop.close()
+    @app.route("/logout", methods=["GET"])
+    def logout():
+        session.clear()
+        return redirect(url_for("login"))
 
 
 # ── Route registration ───────────────────────────
