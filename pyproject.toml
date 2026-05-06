@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scarpshield"
+version = "1.0.2"
+description = "Free, self-hosted smart contract monitoring. Real-time alerts when something happens on-chain."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "David Cooper", email = "ccie14019@gmail.com"}
+]
+keywords = ["blockchain", "smart-contract", "monitoring", "ethereum", "security", "web3", "alerts"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries",
+]
+
+dependencies = [
+    "web3>=6.0.0",
+    "typer>=0.9.0",
+    "flask>=3.0.0",
+]
+
+[project.urls]
+Homepage = "https://counterscarp.io/shield/"
+Repository = "https://github.com/RunTimeAdmin/ScarpShield"
+Documentation = "https://github.com/RunTimeAdmin/ScarpShield/wiki"
+Issues = "https://github.com/RunTimeAdmin/ScarpShield/issues"
+
+[project.scripts]
+scarpshield = "scarp_shield.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["scarp_shield*"]
+
+[tool.setuptools.package-data]
+"scarp_shield.gui" = ["templates/**/*", "static/**/*"]

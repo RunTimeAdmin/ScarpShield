@@ -4,3 +4,10 @@ __pycache__/
 .env
 config.json
 .scarpshield_state.json
+deploy_counterscarp/
+landing/
+*.tar.gz
+*.zip
+dist/
+*.egg-info/
+build/

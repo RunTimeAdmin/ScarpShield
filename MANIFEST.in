@@ -1,0 +1,2 @@
+recursive-include scarp_shield/gui/templates *
+recursive-include scarp_shield/gui/static *
